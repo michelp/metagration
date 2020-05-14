@@ -178,13 +178,13 @@ PostgreSQL. Because metagration scripts are stored procedures, they
 are stateless database objects that can be exported, imported, dropped
 and re-created as necessary.
 
-A helpful tool for doing this `metagration.export([use_schema default
-'metagration_scripts'])`.  The `export()` function will generate a
+A helpful tool for doing this `metagration.export()`.  The `export()`
+function will generate a
 [`psql`](https://www.postgresql.org/docs/12/app-psql.html) script file
-that INSERTs the migration scripts in their correct order.  Simply
-capture the output of this function, for example with:
+that `CREATE OR REPLACE`s the migration scripts. Simply capture
+the output of this function, for example with:
 
-    psql -c "SELECT metagration.export()" > export_file.sql
+    psql -A -t -U postgres -c 'select metagration.export()' > export_file.sql
 
 And then check it in to your source control.  The scripts can then be
 imported with:
@@ -192,18 +192,7 @@ imported with:
     psql < export_file.sql
 
 This will import all the migrations but not *run* them, for that you
-still call `metagration.run()`.
-
-## But I don't wanna write my DDL as quoted strings!
-
-You don't have to, you can use ["dollar quoted"
-strings](https://www.postgresql.org/docs/current/sql-syntax-lexical.html).
-Or you can use the psql client and read metagrations from files:
-
-    XXX
-
-This example loads metagrations from files in a directory with
-sortable names:
-
-    XXX
+still call `metagration.run()`.  If `metagration.export(true)` is
+called the script will truncate the
+script table and re-insert all the exported scripts.
 
