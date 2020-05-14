@@ -18,8 +18,7 @@ CREATE UNIQUE INDEX ON metagration.script (is_current)
     WHERE is_current = true;
 
 CREATE OR REPLACE FUNCTION metagration.check_script()
-    RETURNS TRIGGER
-    LANGUAGE plpgsql SECURITY DEFINER AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
     max_revision bigint;
 BEGIN
@@ -49,14 +48,12 @@ CREATE TABLE metagration.log (
 );
 
 CREATE OR REPLACE FUNCTION metagration.current_revision()
-    RETURNS bigint
-    LANGUAGE sql AS $$
+    RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script WHERE is_current;
 $$;
 
 CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint)
-    RETURNS bigint
-    LANGUAGE sql AS $$
+    RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script
         WHERE revision < from_revision
         ORDER BY revision DESC
@@ -64,8 +61,7 @@ CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint)
 $$;
 
 CREATE OR REPLACE FUNCTION metagration.next_revision(from_revision bigint)
-    RETURNS bigint
-    LANGUAGE sql AS $$
+    RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script
         WHERE revision > from_revision
         ORDER BY revision ASC
@@ -120,11 +116,9 @@ BEGIN
             current_script.script_schema,
             current_script.down_script)
             USING current_script.down_args;
-
         UPDATE metagration.script
            SET is_current = false
            WHERE is_current;
-
         IF revision_end > 0 THEN
             UPDATE metagration.script
                SET is_current = true
@@ -146,9 +140,7 @@ DECLARE
     restore_point_lsn pg_lsn;
 BEGIN
     LOCK TABLE metagration.script IN SHARE MODE;
-
     current_revision = metagration.current_revision();
-
     IF run_to = 0 THEN
         IF current_revision is null THEN
             RAISE 'No starting revision available.';
@@ -156,45 +148,34 @@ BEGIN
         CALL metagration.run_down(current_revision, 0);
         RETURN;
     END IF;
-
     IF run_to IS null THEN
        SELECT max(revision) INTO run_to FROM metagration.script;
     END IF;
-
     SELECT revision INTO revision_end
         FROM metagration.script
         WHERE revision = run_to;
-
     IF revision_end IS null THEN
        RAISE 'no revision %', run_to;
     END IF;
-
     SELECT revision INTO revision_start
         FROM metagration.script
         WHERE is_current;
-
     IF revision_start IS null THEN
        revision_start = 0;
     END IF;
-
     IF revision_start = revision_end THEN
        RAISE '% is already the current revision', run_to;
     END IF;
-
     SELECT clock_timestamp() INTO clock_now;
-
     restore_point = format('%s|%s|%s',
         revision_start, revision_end,
         replace(clock_now::text, ' ', '|'));
-
     SELECT pg_create_restore_point(restore_point) INTO restore_point_lsn;
-
     IF revision_start < revision_end THEN
        CALL metagration.run_up(revision_start, revision_end);
     ELSE
        CALL metagration.run_down(revision_start, revision_end);
     END IF;
-
     INSERT INTO metagration.log (
        revision_start,
        revision_end,
@@ -222,31 +203,28 @@ DECLARE
     delta bigint = run_to::bigint;
 BEGIN
     revision_start = metagration.current_revision();
-
-    execute format('select revision
-       from metagration.script
-       where
-          case when $1 < 0 then
+    EXECUTE format('SELECT revision
+       FROM metagration.script
+       WHERE
+          CASE WHEN $1 < 0 THEN
               revision < $2
-          else
+          ELSE
               revision > $2
-          end
-       order by revision %s limit 1 offset %s',
-       case when delta < 0 then 'desc' else 'asc' end,
+          END
+       ORDER BY revision %s LIMIT 1 OFFSET %s',
+       CASE WHEN delta < 0 THEN 'desc' ELSE 'asc' END,
        abs(delta)-1)
-     into revision_end
-     using delta, revision_start;
-     if revision_end is null then
+     INTO revision_end
+     USING delta, revision_start;
+     IF revision_end IS null THEN
          raise 'No revision % away', run_to;
-     end if;
-     call metagration.run(revision_end);
+     END IF;
+     CALL metagration.run(revision_end);
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration._proc_body(
-    script  text)
-    RETURNS    text
-    LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION metagration._proc_body(script text)
+    RETURNS text LANGUAGE plpgsql AS $$
 BEGIN
 RETURN format(
 $f$BEGIN
@@ -260,8 +238,7 @@ CREATE OR REPLACE FUNCTION metagration._build_proc(
     use_schema  text,
     script_name text,
     body        text)
-    RETURNS    text
-    LANGUAGE plpgsql AS $$
+    RETURNS text LANGUAGE plpgsql AS $$
 BEGIN
 RETURN format(
 $f$
@@ -297,7 +274,6 @@ BEGIN
     EXECUTE metagration._build_proc(
        use_schema, up_name,
        metagration._proc_body(up_script));
-
     UPDATE metagration.script
     SET up_script = up_name,
         down_script = down_name,
@@ -307,9 +283,9 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration._get_source(proc_schema text, proc_name text)
-RETURNS text
-LANGUAGE sql AS $$
+CREATE OR REPLACE FUNCTION metagration._get_source(
+    proc_schema text, proc_name text)
+RETURNS text LANGUAGE sql AS $$
     SELECT prosrc
         FROM pg_proc p, pg_namespace n
         WHERE p.pronamespace = n.oid
