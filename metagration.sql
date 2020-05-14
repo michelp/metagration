@@ -217,7 +217,7 @@ BEGIN
      INTO revision_end
      USING delta, revision_start;
      IF revision_end IS null THEN
-         raise 'No revision % away', run_to;
+         RAISE 'No revision % away', run_to;
      END IF;
      CALL metagration.run(revision_end);
 END;
