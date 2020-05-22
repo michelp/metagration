@@ -14,7 +14,7 @@ PostgreSQL's features, because it *is* PostgreSQL.
   - One simple function for new plpgsql scripts.
 
   - Procedures are transactional, and transaction aware.
-  
+
   - Generates Point In Time Recovery restore points before migration.
 
   - Metagrations can export/import to/from SQL files.
@@ -27,23 +27,20 @@ PostgreSQL's features, because it *is* PostgreSQL.
 
 ## How does it work?
 
-Scripts are run *in revision order*.  This means that revision 2 is
-always run after 1, and before 3 when going up, and the opposite when
-going down.  It is not possible to insert "in between" two existing
-revisions, even if their revisions are not consecutive.  A `BEFORE
-INSERT` trigger enforces that new scripts must have a revision >
-max(revision) for all existing scripts.  While you can disable this
-trigger to bulk import revisions you will be responsible for their
-revision order being correct.
+Scripts are stored procedures run *in revision order*.  This means
+that revision 2 is always run after 1, and before 3 when going up, and
+the opposite when going down.  It is not possible to insert "in
+between" two existing revisions, even if their revisions are not
+consecutive.  A `BEFORE INSERT` trigger enforces that new scripts must
+have a revision > max(revision) for all existing scripts.  While you
+can disable this trigger to bulk import revisions you will be
+responsible for their revision order being correct.
 
 When a script is created with `metagration.create()` the up and down
 code are substituted into the body dynamically generated plpgsql
 procedure.  You don't have to use `create()`, a script can be written
 in any supported language that can write stored procedures, such as
-python and javascript.  In this case you would insert the new script
-directly into the table:
-
-    INSERT INTO metagration.script (up_script) VALUES ('name_of_your_proc');
+python and javascript.
 
 One and only one script at a time can be `is_current = true`.  This is
 enforced with a `UNIQUE` partial index.  The procedure
@@ -56,7 +53,7 @@ time.
 Metagrations are DDL change scripts wrapped in PostgreSQL stored
 procedures run in a specific order either "up" or "down".  A
 metagration is a script defined entirely within the database, there is
-no external migration tool or language.  
+no external migration tool or language.
 
 The process in the forward direction is that you add your metagration
 scripts, then you run `metagration.run()` from any database client.
@@ -151,7 +148,7 @@ A log of all migrations, their start and end revisions, times, and
 restore points are stored in the `metagration.log` table:
 
     # SELECT * FROM metagration.log ORDER BY migration_start;
-     revision_start | revision_end |        migration_start        |         migration_end         | txid |           restore_point           | restore_point_lsn 
+     revision_start | revision_end |        migration_start        |         migration_end         | txid |           restore_point           | restore_point_lsn
     ----------------+--------------+-------------------------------+-------------------------------+------+-----------------------------------+-------------------
                   0 |            1 | 2020-05-13 23:13:02.830335+00 | 2020-05-13 23:13:02.831964+00 |  505 | 0|1|2020-05-13|23:13:02.830335+00 | 0/183F408
                   1 |            3 | 2020-05-13 23:13:02.841926+00 | 2020-05-13 23:13:02.8432+00   |  505 | 1|3|2020-05-13|23:13:02.841926+00 | 0/1841A20
@@ -195,4 +192,3 @@ This will import all the migrations but not *run* them, for that you
 still call `metagration.run()`.  If `metagration.export(true)` is
 called the script will truncate the
 script table and re-insert all the exported scripts.
-

@@ -17,7 +17,7 @@ CREATE TABLE metagration.script (
 CREATE UNIQUE INDEX ON metagration.script (is_current)
     WHERE is_current = true;
 
-CREATE OR REPLACE FUNCTION metagration.check_script()
+CREATE OR REPLACE FUNCTION metagration.check_script_trigger()
     RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
     max_revision bigint;
@@ -32,19 +32,19 @@ $$;
 
 CREATE TRIGGER before_insert_script_trigger
     BEFORE INSERT ON metagration.script
-    FOR EACH ROW EXECUTE PROCEDURE metagration.check_script();
+    FOR EACH ROW EXECUTE PROCEDURE metagration.check_script_trigger();
 
 INSERT INTO metagration.script (revision, is_current) VALUES (0, true);
 
 CREATE TABLE metagration.log (
     revision_start    bigint REFERENCES metagration.script (revision),
     revision_end      bigint REFERENCES metagration.script (revision),
-    migration_start   timestamptz,
+    migration_start   timestamptz not null,
     migration_end     timestamptz,
     txid              bigint,
     restore_point     text,
     restore_point_lsn pg_lsn,
-    PRIMARY KEY       (revision_start, revision_end)
+    PRIMARY KEY       (revision_start, revision_end, migration_start)
 );
 
 CREATE OR REPLACE FUNCTION metagration.current_revision()
@@ -52,18 +52,18 @@ CREATE OR REPLACE FUNCTION metagration.current_revision()
     SELECT revision FROM metagration.script WHERE is_current;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint)
+CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint=null)
     RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script
-        WHERE revision < from_revision
+        WHERE revision < coalesce(from_revision, metagration.current_revision())
         ORDER BY revision DESC
         LIMIT 1;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration.next_revision(from_revision bigint)
+CREATE OR REPLACE FUNCTION metagration.next_revision(from_revision bigint=null)
     RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script
-        WHERE revision > from_revision
+        WHERE revision > coalesce(from_revision, metagration.current_revision())
         ORDER BY revision ASC
         LIMIT 1;
 $$;
@@ -119,12 +119,10 @@ BEGIN
         UPDATE metagration.script
            SET is_current = false
            WHERE is_current;
-        IF revision_end > 0 THEN
-            UPDATE metagration.script
-               SET is_current = true
-               WHERE revision =
-               metagration.previous_revision(current_script.revision);
-        END IF;
+        UPDATE metagration.script
+           SET is_current = true
+           WHERE
+             revision = metagration.previous_revision(current_script.revision);
     END LOOP;
 END;
 $$;
@@ -168,7 +166,8 @@ BEGIN
     END IF;
     SELECT clock_timestamp() INTO clock_now;
     restore_point = format('%s|%s|%s',
-        revision_start, revision_end,
+        revision_start,
+        revision_end,
         replace(clock_now::text, ' ', '|'));
     SELECT pg_create_restore_point(restore_point) INTO restore_point_lsn;
     IF revision_start < revision_end THEN
@@ -203,7 +202,8 @@ DECLARE
     delta bigint = run_to::bigint;
 BEGIN
     revision_start = metagration.current_revision();
-    EXECUTE format('SELECT revision
+    EXECUTE format($f$
+    SELECT revision
        FROM metagration.script
        WHERE
           CASE WHEN $1 < 0 THEN
@@ -211,7 +211,8 @@ BEGIN
           ELSE
               revision > $2
           END
-       ORDER BY revision %s LIMIT 1 OFFSET %s',
+       ORDER BY revision %s LIMIT 1 OFFSET %s
+       $f$,
        CASE WHEN delta < 0 THEN 'desc' ELSE 'asc' END,
        abs(delta)-1)
      INTO revision_end
@@ -231,8 +232,7 @@ $f$BEGIN
     %s;
     RETURN;
 END;$f$, script);
-END;
-$$;
+END;$$;
 
 CREATE OR REPLACE FUNCTION metagration._build_proc(
     use_schema  text,
@@ -293,7 +293,9 @@ RETURNS text LANGUAGE sql AS $$
         AND n.nspname=proc_schema;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration.export(replace_scripts boolean=false)
+CREATE OR REPLACE FUNCTION metagration.export(
+    replace_scripts boolean=false,
+    transactional boolean=false)
 RETURNS text
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -301,9 +303,13 @@ DECLARE
     buffer         text='';
     proc_source    text;
 BEGIN
+    IF transactional THEN
+        buffer = buffer || 'BEGIN;';
+    END IF;
     IF replace_scripts THEN
         buffer = buffer || format(
-$f$TRUNCATE metagration.script CASCADE;
+$f$
+TRUNCATE metagration.script CASCADE;
 INSERT INTO metagration.script (revision, is_current) VALUES (0, true);
 $f$);
     END IF;
@@ -330,12 +336,12 @@ $f$);
         END IF;
         IF replace_scripts THEN
             buffer = buffer || format(
-$format$
+$f$
 INSERT INTO metagration.script
-    (revision, is_current, script_schema, up_script, up_args, down_script, down_args, comment)
-    VALUES (%L, %L, %L, %L, %L, %L, %L, %L);
-$format$, current_script.revision,
-current_script.is_current,
+    (revision, script_schema, up_script, up_args, down_script, down_args, comment)
+    VALUES (%L, %L, %L, %L, %L, %L, %L);
+$f$,
+current_script.revision,
 current_script.script_schema,
 current_script.up_script,
 current_script.up_args,
@@ -344,6 +350,9 @@ current_script.down_args,
 current_script.comment);
         END IF;
     END LOOP;
+    IF transactional THEN
+        buffer = buffer || 'COMMIT;';
+    END IF;
     RETURN buffer;
 END;
 $$;
