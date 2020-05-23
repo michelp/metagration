@@ -6,12 +6,12 @@
 
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
 
-Metagration "up/down" scripts are stored and applied in-database by
-the database.  Creating and managing metagrations and actually running
-them are *completely decoupled*.  Metagrations can be managed like any
-other data in your database using whatever favorite tool you are
-already familar with. Metagration has support for 100% of PostgreSQL's
-features, because it *is* PostgreSQL.
+Metagration "up/down" scripts are stored procedures and applied
+in-database by the database.  Creating and managing metagrations and
+actually running them are *completely decoupled*.  Metagrations can be
+managed like any other data in your database using whatever favorite
+tool you are already familar with. Metagration has support for 100% of
+PostgreSQL's features, because it *is* PostgreSQL.
 
   - Up/Down scripts are stored procedures in any pl language.
 
