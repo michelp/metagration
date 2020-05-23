@@ -59,7 +59,7 @@ scripts, then you run `metagration.run()` from any database client.
 Now your database is up to date.
 
 Metagration scripts are what move the database from one revision to
-the next.  Forward metagration runs the "up" script, and downward
+the next.  Forward metagration runs the "up" script, and backward
 metagration runs the "down" script to undo the "up" operation.
 Scripts can be written in *any* supported stored procedure language.
 Metagration strictly enforces the revision order of the scripts
@@ -175,15 +175,16 @@ are stateless database objects that can be exported, imported, dropped
 and re-created as necessary.
 
 A helpful tool for doing this `metagration.export()`.  The `export()`
-function will generate a
-[`psql`](https://www.postgresql.org/docs/12/app-psql.html) script file
-that `CREATE OR REPLACE`s the migration scripts. Simply capture
-the output of this function, for example with:
+function will generate SQL script file that `CREATE OR REPLACE`s the
+migration scripts. Simply capture the output of this function, for
+example with:
 
     psql -A -t -U postgres -c 'select metagration.export()' > export_file.sql
 
 And then check it in to your source control.  The scripts can then be
-imported with:
+imported with
+[`psql`](https://www.postgresql.org/docs/12/app-psql.html) or any
+other PostgreSQL client:
 
     psql < export_file.sql
 
