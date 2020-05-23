@@ -2,24 +2,24 @@
 \pset tuples_only true
 \pset pager
 
-\set ECHO none
-\set ON_ERROR_ROLLBACK 1
-\set ON_ERROR_STOP true
-\set QUIET 1
+-- \set ECHO none
+-- \set ON_ERROR_ROLLBACK 1
+-- \set ON_ERROR_STOP true
+-- \set QUIET 1
 
 CREATE EXTENSION pgtap;
 
 SET search_path = pgtap, metagration, public;
 
-SELECT plan(78);
+SELECT plan(86);
 
 SELECT lives_ok($$
 SELECT new_script(
-'create table foo (bar int)',
-'drop table foo');
-$$, 'create foo script');
+'CREATE TABLE foo (bar int)',
+'DROP TABLE foo');
+$$, 'CREATE foo script');
 
-call run();
+CALL run();
 
 SELECT current_revision() AS checkpoint \gset
 SELECT is(:checkpoint, 1, 'checkpoint is first');
@@ -28,17 +28,17 @@ SELECT has_table('foo'::name, 'floo exists');
 
 SELECT lives_ok($$
 SELECT new_script(
-'create table lii (bar int)',
-'drop table lii');
-$$, 'create lii script');
+'CREATE TABLE lii (bar int)',
+'DROP TABLE lii');
+$$, 'CREATE lii script');
 
 SELECT lives_ok($$
 SELECT new_script(
-'create table loo (bar int)',
-'drop table loo');
-$$, 'create loo script');
+'CREATE TABLE loo (bar int)',
+'DROP TABLE loo');
+$$, 'CREATE loo script');
 
-call run();
+CALL run();
 
 -- SELECT * from log order by migration_start;
 
@@ -51,18 +51,18 @@ SELECT has_table('loo'::name, 'loo exists');
 
 SELECT lives_ok($$
 SELECT new_script(
-'create table zink (bar int)',
-'drop table zink cascade');
-$$, 'create zink script');
+'CREATE TABLE zink (bar int)',
+'DROP TABLE zink cascade');
+$$, 'CREATE zink script');
 
-call run();
+CALL run();
 -- SELECT * from log order by migration_start;
 
 SELECT is(previous_revision(), 3::bigint, 'previous revision is ' || previous_revision());
 SELECT is(current_revision(), 4::bigint, 'current revision is ' || current_revision());
 SELECT is(next_revision(), null, 'next revision is null');
 
-call run(:checkpoint);
+CALL run(:checkpoint);
 
 SELECT is(previous_revision(), 0::bigint, 'previous revision is ' || previous_revision());
 SELECT is(current_revision(), 1::bigint, 'current revision is ' || current_revision());
@@ -70,7 +70,7 @@ SELECT is(next_revision(), 2::bigint, 'next revision is ' || next_revision());
 
 SELECT hasnt_table('zink'::name, 'no zink');
 
-call run();
+CALL run();
 
 SELECT is(previous_revision(), 3::bigint, 'previous revision is ' || previous_revision());
 SELECT is(current_revision(), 4::bigint, 'current revision is ' || current_revision());
@@ -78,7 +78,7 @@ SELECT is(next_revision(), null, 'next revision is null');
 
 SELECT has_table('zink'::name, 'zink exists');
 
-call run(0);
+CALL run(0);
 
 SELECT is(previous_revision(), null, 'previous revision is null');
 SELECT is(current_revision(), 0::bigint, 'current revision is ' || current_revision());
@@ -88,7 +88,7 @@ SELECT hasnt_table('zink'::name, 'no zink');
 SELECT hasnt_table('lii'::name, 'no lii');
 SELECT hasnt_table('loo'::name, 'no loo');
 
-call run();
+CALL run();
 
 SELECT is(previous_revision(), 3::bigint, 'previous revision is ' || previous_revision());
 SELECT is(current_revision(), 4::bigint, 'current revision is ' || current_revision());
@@ -114,7 +114,7 @@ SELECT has_table('zink'::name, 'zink exists');
 SELECT has_table('lii'::name, 'lii exists');
 SELECT has_table('loo'::name, 'loo exists');
 
-call run(0);
+CALL run(0);
 
 SELECT is(previous_revision(), null, 'previous revision is null');
 SELECT is(current_revision(), 0::bigint, 'current revision is ' || current_revision());
@@ -130,7 +130,7 @@ SELECT export(transactional:=true);
 \i _tmp_test_migration_export_txn.sql
 \! rm _tmp_test_migration_export_txn.sql
 
-call run();
+CALL run();
 
 SELECT is(previous_revision(), 3::bigint, 'previous revision is ' || previous_revision());
 SELECT is(current_revision(), 4::bigint, 'current_revision is ' || current_revision());
@@ -140,7 +140,7 @@ SELECT has_table('zink'::name, 'zink exists');
 SELECT has_table('lii'::name, 'lii exists');
 SELECT has_table('loo'::name, 'loo exists');
 
-call run(0);
+CALL run(0);
 
 SELECT is(previous_revision(), null, 'previous revision is null');
 SELECT is(current_revision(), 0::bigint, 'current revision is ' || current_revision());
@@ -164,7 +164,7 @@ SELECT hasnt_table('zink'::name, 'no zink');
 SELECT hasnt_table('lii'::name, 'no lii');
 SELECT hasnt_table('loo'::name, 'no loo');
 
-call run();
+CALL run();
 
 SELECT is(previous_revision(), 3::bigint, 'previous revision is ' || previous_revision());
 SELECT is(current_revision(), 4::bigint, 'current_revision is ' || current_revision());
@@ -174,7 +174,7 @@ SELECT has_table('zink'::name, 'zink exists');
 SELECT has_table('lii'::name, 'lii exists');
 SELECT has_table('loo'::name, 'loo exists');
 
-call run(0);
+CALL run(0);
 
 SELECT is(previous_revision(), null, 'previous revision is null');
 SELECT is(current_revision(), 0::bigint, 'current revision is ' || current_revision());
@@ -198,6 +198,29 @@ SELECT has_table('zink'::name, 'zink exists');
 SELECT has_table('lii'::name, 'lii exists');
 SELECT has_table('loo'::name, 'loo exists');
 
--- SELECT * from log order by migration_start;
+SELECT lives_ok($$
+SELECT new_script(
+$up$
+    FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
+        EXECUTE format('CREATE TABLE %I (id serial)', 'forks_' || i);
+    END LOOP
+$up$,
+$down$
+    FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
+        EXECUTE format('DROP TABLE %I', 'forks_' || i);
+    END LOOP
+$down$,
+    up_declare:='i bigint',
+    down_declare:='i bigint'
+    );
+$$, 'CREATE forks script');
+
+CALL run(args:=jsonb_build_object('target', 3));
+
+SELECT has_table('forks_1'::name, 'forks_1 exists');
+SELECT has_table('forks_2'::name, 'forks_2 exists');
+SELECT has_table('forks_3'::name, 'forks_3 exists');
+
+SELECT * from log order by migration_start;
 
 SELECT * FROM finish();

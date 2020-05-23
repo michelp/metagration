@@ -21,7 +21,7 @@ PostgreSQL's features, because it *is* PostgreSQL.
 
   - One simple function for new SQL scripts.
 
-  - Procedures are transactional, and transaction aware.
+  - Procedures can be transactional, and transaction aware.
 
   - Generates Point In Time Recovery restore points before migration.
 
@@ -33,8 +33,6 @@ PostgreSQL's features, because it *is* PostgreSQL.
 
   - Postgres docker container entrypoint friendly.
   
-  - 100% test coverage.
-
 ## Intro
 
 Metagrations are DDL change scripts wrapped in PostgreSQL stored
@@ -67,7 +65,6 @@ dynamically created plpgsql functions.  Once the script is created, it
 can then be run with `metagration.run()`
 
     # CALL metagration.run();
-    CALL
     # \dt
             List of relations
      Schema | Name | Type  |  Owner
@@ -84,7 +81,6 @@ Now add another script with an unfortunate table name to be reverted:
     --------
           2
     # CALL metagration.run();
-    CALL
     # \dt
             List of relations
      Schema | Name | Type  |  Owner
@@ -97,8 +93,6 @@ specific target revision, in this case back to 1, and the `bad` table
 gets dropped:
 
     postgres=# CALL metagration.run(1);
-    CALL
-
     # \dt
             List of relations
      Schema | Name | Type  |  Owner
@@ -111,12 +105,10 @@ The current, previous, and next revisions can be queried:
      previous_revision
     ------------------
                      0
-
     # SELECT metagration.current_revision();
      current_revision
     -----------------
                     1
-
     # SELECT metagration.next_revision();
      next_revision
     --------------
@@ -145,6 +137,64 @@ Before each metagration a recovery restore point is created with
 and can be used for Point In Time Recovery to the point just before
 the migration and other recovery tasks.  The current transaction id is
 also saved.
+
+## Dynamic Metagrations
+
+Metagration scripts are stored procedures, and can be fully dynamic in
+terms of the SQL they execute when run.  To facilitate this, the
+`run()` function accepts an optional `args jsonb` argument that is
+passed to each script when run.  This allows scripts to respond to
+dynamic variables at run time.
+
+For plpgsql scripts built with `new_script`, optional local variable
+declarations can also be provided, in the following example, the index
+variable `i` in the `FOR` loops are declared in the `up_declare` and
+`down_declare` parameters to `new_script()` shown here:
+
+    SELECT new_script(
+    $up$
+        FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
+            EXECUTE format('CREATE TABLE %I (id serial)', 'forks_' || i);
+        END LOOP
+    $up$,
+    $down$
+        FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
+            EXECUTE format('DROP TABLE %I', 'forks_' || i);
+        END LOOP
+    $down$,
+        up_declare:='i bigint',
+        down_declare:='i bigint'
+        );
+        
+To run, pass an integer value for the `target` jsonb key in `args`:
+
+    # CALL metagration.run(args:=jsonb_build_object('target', 3));
+    # \dt+
+                          List of relations
+     Schema |  Name   | Type  |  Owner   |  Size   | Description 
+    --------+---------+-------+----------+---------+-------------
+     public | forks_1 | table | postgres | 0 bytes | 
+     public | forks_2 | table | postgres | 0 bytes | 
+     public | forks_3 | table | postgres | 0 bytes | 
+     
+If your up script depends on `args`, it's likely your down scripts do
+too.  Pass them as well to revert or, get the args used in the up
+migration from the `migration.log` table where they are saved.
+
+    # CALL metagration.run('-1', args:=jsonb_build_object('target', 3));
+    # \dt+
+                          List of relations
+     Schema |  Name   | Type  |  Owner   |  Size   | Description 
+    --------+---------+-------+----------+---------+-------------
+
+    # SELECT migration_args FROM metagration.log 
+      WHERE revision_end = metagration.current_revision() 
+      ORDER BY migration_end DESC LIMIT 1;
+      
+     migration_args 
+    ----------------
+     {"target": 3}
+    (1 row)
 
 ## Import and Exporting
 
@@ -184,15 +234,15 @@ This will import all the migrations but not *run* them, for that you
 still call `metagration.run()` or pass `run_migrations:=true` as shown
 below.
 
-If `metagration.export(replace_scripts:=true)` is called the script
-will truncate the `script` and `log` tables and re-insert all the
-exported scripts.
+If `metagration.export(replace_scripts:=true)` is called the generated
+script will truncate the `script` and `log` tables and re-insert all
+the exported scripts.
 
-If `metagration.export(transactional:=true)` the script will wrap the
-metagration in `BEGIN/COMMIT`.
+If `metagration.export(transactional:=true)` the generated script will
+wrap itself in `BEGIN/COMMIT`.
 
-If `metagration.export(run_migrations:=true)` the script will emit
-code that will run the migrations immediately after inserting them.
+If `metagration.export(run_migrations:=true)` the generated script
+will run the migrations immediately after inserting them.
 
 ## Docker Entrypoint
 
