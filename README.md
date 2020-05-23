@@ -8,7 +8,7 @@ Metagration is a PostgreSQL migration tool written in PostgreSQL.
 
 Metagration "up/down" scripts are stored and applied in-database by
 the database.  Creating and managing metagrations and actually running
-them are *completely decoupled*.  Metagrations are managed like any
+them are *completely decoupled*.  Metagrations can be managed like any
 other data in your database using whatever favorite tool you are
 already familar with. Metagration has support for 100% of PostgreSQL's
 features, because it *is* PostgreSQL.
@@ -17,7 +17,7 @@ features, because it *is* PostgreSQL.
 
   - No external tools, any PostgreSQL client can manage metagrations.
 
-  - Cloud-friendly single ~400 line SQL file for any PostgreSQL > 10.
+  - Cloud-friendly single ~400 line SQL file for any PostgreSQL >= 11.
 
   - One simple function for new SQL scripts.
 
@@ -42,24 +42,20 @@ procedures run in a specific order either "up" or "down".  A
 metagration is a script defined entirely within the database, there is
 no external migration tool or language.
 
-The process in the forward direction is that you add your metagration
-scripts, then you run `metagration.run()` from any database client.
-Now your database is up to date.
-
-Metagration scripts are what move the database from one revision to
-the next.  Forward metagration runs the "up" script, and backward
-metagration runs the "down" script to undo the "up" operation.
-Scripts can be written in *any* supported stored procedure language.
-Metagration strictly enforces the revision order of the scripts
-applied.
+Metagration `script`s are what move the database from one revision to
+the next.  Forward metagration runs the "up" procedure, and backward
+metagration runs the "down" procedure to undo the "up" operation.
+Script procedures can be written in *any* supported stored procedure
+language.  Metagration strictly enforces the revision order of the
+scripts applied.
 
 Metagration comes with a simple create function for writing fast up
 and down scripts in plpgsql, which often look exactly like their SQL
 counterparts:
 
     # SELECT metagration.new_script(
-          'create table public.foo (id bigserial)',
-          'drop table public.foo'
+          'CREATE TABLE public.foo (id bigserial)',
+          'DROP TABLE public.foo'
           );
      new_script
     --------
@@ -81,8 +77,8 @@ can then be run with `metagration.run()`
 Now add another script with an unfortunate table name to be reverted:
 
     # SELECT metagration.new_script(
-        'create table public.bad (id bigserial)',
-        'drop table public.bad
+        'CREATE TABLE public.bad (id bigserial)',
+        'DROP TABLE public.bad
         );
      new_script
     --------
