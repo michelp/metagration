@@ -1,15 +1,23 @@
 [![Build Status](https://api.travis-ci.com/michelp/metagration.svg?branch=master)](https://travis-ci.com/github/michelp/metagration)
 <br />
+<p align="center">
+  <img src="metagration.svg" alt="Metagration Logo"/>
+</p>
+
 # Metagration: PostgreSQL Migrator in PostgreSQL
 
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
-Metagration scripts are stored and applied in-database by the
-database.  Metagration has support for 100% of PostgreSQL's features,
-because it *is* PostgreSQL.
+
+Metagration "up/down" scripts are stored and applied in-database by
+the database.  Creating and managing metagrations and actually running
+them are *completely decoupled*.  Metagrations are managed like any
+other data in your database using whatever favorite tool you are
+already familar with. Metagration has support for 100% of PostgreSQL's
+features, because it *is* PostgreSQL.
 
   - Up/Down scripts are stored procedures in any pl language.
 
-  - No external tools, any PostgreSQL client can drive.
+  - No external tools, any PostgreSQL client can manage metagrations.
 
   - Cloud-friendly single ~400 line SQL file for any PostgreSQL > 10.
 
@@ -20,6 +28,8 @@ because it *is* PostgreSQL.
   - Generates Point In Time Recovery restore points before migration.
 
   - Metagrations can export/import to/from SQL files.
+
+  - Metagrations are just rows so `pg_dump/pg_restore` them.
 
   - Can use pgTAP for powerful migration verification.
 
@@ -84,9 +94,9 @@ This creates a new revision `1`.  The function
 dynamically created plpgsql functions.  Once the script is created, it
 can then be run with `metagration.run()`
 
-    postgres=# CALL metagration.run();
+    # CALL metagration.run();
     CALL
-    postgres=# \dt
+    # \dt
             List of relations
      Schema | Name | Type  |  Owner
     --------+------+-------+----------
@@ -101,9 +111,9 @@ Now add another script with an unfortunate table name to be reverted:
      new_script
     --------
           2
-    postgres=# CALL metagration.run();
+    # CALL metagration.run();
     CALL
-    postgres=# \dt
+    # \dt
             List of relations
      Schema | Name | Type  |  Owner
     --------+------+-------+----------
@@ -117,7 +127,7 @@ gets dropped:
     postgres=# CALL metagration.run(1);
     CALL
 
-    postgres=# \dt
+    # \dt
             List of relations
      Schema | Name | Type  |  Owner
     --------+------+-------+----------
@@ -125,22 +135,23 @@ gets dropped:
 
 The current, previous, and next revisions can be queried:
 
-    SELECT metagration.current_revision();
+    # SELECT metagration.previous_revision();
+     previous_revision
+    ------------------
+                     0
+
+    # SELECT metagration.current_revision();
      current_revision
     -----------------
                     1
-    SELECT metagration.previous_revision(1);
-     previous_revision
-    ------------------
 
-    SELECT metagration.next_revision(1);
+    # SELECT metagration.next_revision();
      next_revision
     --------------
                  2
 
-`1` has no previous revision, so `previous_revision()` returns null.
 Metagrations can also be run with a relative revision parameter passed
-as text:
+as a text string:
 
     CALL metagration.run('1');  -- go forward one revision
     CALL metagration.run('-3');  -- go back three revisions
@@ -157,18 +168,29 @@ restore points are stored in the `metagration.log` table:
                   4 |            1 | 2020-05-13 23:13:02.848043+00 | 2020-05-13 23:13:02.850642+00 |  505 | 4|1|2020-05-13|23:13:02.848043+00 | 0/18459C0
                   1 |            4 | 2020-05-13 23:13:02.852157+00 | 2020-05-13 23:13:02.858205+00 |  505 | 1|4|2020-05-13|23:13:02.852157+00 | 0/1846790
 
-
 Before each metagration a recovery restore point is created with
 [`pg_create_restore_point`](https://www.postgresql.org/docs/12/functions-admin.html#FUNCTIONS-ADMIN-BACKUP)
-and can be used for Point In Time Recovery and other recovery tasks.
+and can be used for Point In Time Recovery to the point just before
+the migration and other recovery tasks.  The current transaction id is
+also saved.
 
-## Who migrates the migrators?
+## Docker Entrypoint
+
+Metagrations can be used easily from docker entry points.
+
+## Import and Exporting
 
 The obvious question is, if metagrations are stored procedures that
-makes DDL changes, who CREATEs the metagrations?  Why you do of
-course!  You can still check your metagrations into source control and
-stream them into a new database when you initialize it, then call
+makes DDL changes, who CREATEs the metagrations?  They can be created
+programatically as shown above with `new_script`, or they can be
+import and exported using any SQL client or tool.
+
+You can still check your metagrations into source control and stream
+them into a new database when you initialize it, then call
 `metagrate.run()`.
+
+Because metagrations are in-database, they are dumped and restored
+when the database is backed up.
 
 Since this process is *decoupled* from the actual migration, it can be
 done using any of the many database management tools for
