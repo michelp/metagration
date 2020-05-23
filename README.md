@@ -1,9 +1,8 @@
+<p align="center">
+  <img width="100vw" src="metagration.svg" alt="Metagration Logo"/>
+</p>
 [![Build Status](https://api.travis-ci.com/michelp/metagration.svg?branch=master)](https://travis-ci.com/github/michelp/metagration)
 <br />
-<p align="center">
-  <img width="50vw" src="metagration.svg" alt="Metagration Logo"/>
-</p>
-
 # Metagration: PostgreSQL Migrator in PostgreSQL
 
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
