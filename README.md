@@ -1,3 +1,5 @@
+[![Build Status](https://api.travis-ci.com/michelp/metagration.svg?branch=master)](https://travis-ci.com/github/michelp/metagration)
+<br />
 # Metagration: PostgreSQL Migrator in PostgreSQL
 
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
