@@ -1,7 +1,7 @@
 [![Build Status](https://api.travis-ci.com/michelp/metagration.svg?branch=master)](https://travis-ci.com/github/michelp/metagration)
 <br />
 <p align="center">
-  <img src="metagration.svg" alt="Metagration Logo"/>
+  <img width="10vw" src="metagration.svg" alt="Metagration Logo"/>
 </p>
 
 # Metagration: PostgreSQL Migrator in PostgreSQL
