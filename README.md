@@ -172,10 +172,6 @@ and can be used for Point In Time Recovery to the point just before
 the migration and other recovery tasks.  The current transaction id is
 also saved.
 
-## Docker Entrypoint
-
-Metagrations can be used easily from docker entry points.
-
 ## Import and Exporting
 
 The obvious question is, if metagrations are stored procedures that
@@ -211,6 +207,25 @@ other PostgreSQL client:
     psql < export_file.sql
 
 This will import all the migrations but not *run* them, for that you
-still call `metagration.run()`.  If `metagration.export(true)` is
-called the script will truncate the
-script table and re-insert all the exported scripts.
+still call `metagration.run()` or pass `run_migrations:=true` as shown
+below.
+
+If `metagration.export(replace_scripts:=true)` is called the script
+will truncate the `script` and `log` tables and re-insert all the
+exported scripts.
+
+If `metagration.export(transactional:=true)` the script will wrap the
+metagration in `BEGIN/COMMIT`.
+
+If `metagration.export(run_migrations:=true)` the script will emit
+code that will run the migrations immediately after inserting them.
+
+## Docker Entrypoint
+
+Metagrations can be used easily from the standard postgres docker
+container entry point directory.  The SQL code dumped from
+`export(run_migrations:=true)` (see above) can be dropped into the
+`/docker-entrypoint-initdb.d/` directory in the container and the
+migrations will be inserted and automatically run when the new
+container is initialized.
+
