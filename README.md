@@ -32,30 +32,8 @@ features, because it *is* PostgreSQL.
   - Can use pgTAP for powerful migration verification.
 
   - Postgres docker container entrypoint friendly.
-
-## How does it work?
-
-Metagration scripts are stored procedures run *in revision order*.
-This means that revision 2 is always run after 1, and before 3 when
-migrating forward, and the opposite when going backwards.  It is not
-possible to insert "in between" two existing revisions, even if their
-revisions are not consecutive.  A `BEFORE INSERT` trigger enforces
-that new scripts must have a `revision > max(revision)` for all
-existing scripts.  While you can disable this trigger to bulk import
-revisions you will be responsible for their revision order being
-correct.
-
-When a script is created with `metagration.new_script()` the up and down
-code are substituted into the body dynamically generated plpgsql
-procedure.  You don't have to use `new_script()`, a script can be written
-in any supported language that can write stored procedures, such as
-python and javascript.
-
-One and only one script at a time can be `is_current = true`.  This is
-enforced with a `UNIQUE` partial index.  The procedure
-`metagration.run()` also does a 'LOCK ... SHARE MODE' on the script
-table when it runs ensuring only one metagration script can run at a
-time.
+  
+  - 100% test coverage.
 
 ## Intro
 
@@ -229,3 +207,26 @@ container entry point directory.  The SQL code dumped from
 migrations will be inserted and automatically run when the new
 container is initialized.
 
+## How does it work?
+
+Metagration scripts are stored procedures run *in revision order*.
+This means that revision 2 is always run after 1, and before 3 when
+migrating forward, and the opposite when going backwards.  It is not
+possible to insert "in between" two existing revisions, even if their
+revisions are not consecutive.  A `BEFORE INSERT` trigger enforces
+that new scripts must have a `revision > max(revision)` for all
+existing scripts.  While you can disable this trigger to bulk import
+revisions you will be responsible for their revision order being
+correct.
+
+When a script is created with `metagration.new_script()` the up and down
+code are substituted into the body dynamically generated plpgsql
+procedure.  You don't have to use `new_script()`, a script can be written
+in any supported language that can write stored procedures, such as
+python and javascript.
+
+One and only one script at a time can be `is_current = true`.  This is
+enforced with a `UNIQUE` partial index.  The procedure
+`metagration.run()` also does a 'LOCK ... SHARE MODE' on the script
+table when it runs ensuring only one metagration script can run at a
+time.
