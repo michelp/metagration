@@ -14,6 +14,9 @@ CREATE TABLE metagration.script (
     comment       text
 );
 
+COMMENT ON TABLE metagration.script IS
+    'Table for metagration scripts.';
+
 CREATE UNIQUE INDEX ON metagration.script (is_current)
     WHERE is_current = true;
 
@@ -34,6 +37,7 @@ CREATE TRIGGER before_insert_script_trigger
     BEFORE INSERT ON metagration.script
     FOR EACH ROW EXECUTE PROCEDURE metagration.check_script_trigger();
 
+-- 0 is the "base" revision, which means no scripts applied.
 INSERT INTO metagration.script (revision, is_current) VALUES (0, true);
 
 CREATE TABLE metagration.log (
@@ -47,10 +51,16 @@ CREATE TABLE metagration.log (
     PRIMARY KEY       (revision_start, revision_end, migration_start)
 );
 
+COMMENT ON TABLE metagration.script IS
+'Log of metagrations that have been applied, when and their restore points.';
+
 CREATE OR REPLACE FUNCTION metagration.current_revision()
     RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script WHERE is_current;
 $$;
+
+COMMENT ON FUNCTION metagration.current_revision() IS
+'Returns the current revision or null if no revisions applied.';
 
 CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint=null)
     RETURNS bigint LANGUAGE sql AS $$
@@ -60,6 +70,11 @@ CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint=nu
         LIMIT 1;
 $$;
 
+COMMENT ON FUNCTION metagration.previous_revision(bigint) IS
+'Returns the previons revision or null if no previous revision to the
+one supplied.  If no revision is supplied, default to the current
+revision';
+
 CREATE OR REPLACE FUNCTION metagration.next_revision(from_revision bigint=null)
     RETURNS bigint LANGUAGE sql AS $$
     SELECT revision FROM metagration.script
@@ -67,6 +82,11 @@ CREATE OR REPLACE FUNCTION metagration.next_revision(from_revision bigint=null)
         ORDER BY revision ASC
         LIMIT 1;
 $$;
+
+COMMENT ON FUNCTION metagration.next_revision(bigint) IS
+'Returns the next revision or null if no next revision to the
+one supplied.  If no revision is supplied, default to the current
+revision';
 
 CREATE OR REPLACE PROCEDURE metagration.run_up(
     revision_start bigint,
@@ -95,6 +115,9 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+COMMENT ON PROCEDURE metagration.run_up(bigint, bigint) IS
+'Apply up scripts from start to end revisions.';
 
 CREATE OR REPLACE PROCEDURE metagration.run_down(
     revision_start bigint,
@@ -126,6 +149,9 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+COMMENT ON PROCEDURE metagration.run_down(bigint, bigint) IS
+'Apply down scripts from start to end revisions.';
 
 CREATE OR REPLACE PROCEDURE metagration.run(run_to bigint=null)
     LANGUAGE plpgsql AS $$
@@ -194,6 +220,10 @@ BEGIN
 END;
 $$;
 
+COMMENT ON PROCEDURE metagration.run(bigint) IS
+'Run from thecurrent revision, forwards or backwards to the target
+revision.';
+
 CREATE OR REPLACE PROCEDURE metagration.run(run_to text)
     LANGUAGE plpgsql AS $$
 DECLARE
@@ -224,6 +254,11 @@ BEGIN
 END;
 $$;
 
+COMMENT ON PROCEDURE metagration.run(text) IS
+'Run from the current revision, forwards or backwards to the target
+revision using relative notation -1 to go back one, +3 to go forward
+3, etc...';
+
 CREATE OR REPLACE FUNCTION metagration._proc_body(script text)
     RETURNS text LANGUAGE plpgsql AS $$
 BEGIN
@@ -250,7 +285,7 @@ $f$, use_schema, script_name, script_name, body, script_name);
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration.create(
+CREATE OR REPLACE FUNCTION metagration.new_script(
     up_script   text,
     down_script text=null,
     use_schema  text='metagration_scripts',
@@ -295,7 +330,8 @@ $$;
 
 CREATE OR REPLACE FUNCTION metagration.export(
     replace_scripts boolean=false,
-    transactional boolean=false)
+    transactional boolean=false,
+    run_migrations boolean=false)
 RETURNS text
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -304,7 +340,8 @@ DECLARE
     proc_source    text;
 BEGIN
     IF transactional THEN
-        buffer = buffer || 'BEGIN;';
+        buffer = buffer || '
+BEGIN;';
     END IF;
     IF replace_scripts THEN
         buffer = buffer || format(
@@ -350,9 +387,18 @@ current_script.down_args,
 current_script.comment);
         END IF;
     END LOOP;
+    IF run_migrations THEN
+        buffer = buffer || '
+CALL metagration.run();';
+    END IF;
     IF transactional THEN
-        buffer = buffer || 'COMMIT;';
+        buffer = buffer || '
+COMMIT;';
     END IF;
     RETURN buffer;
 END;
 $$;
+
+COMMENT ON FUNCTION metagration.export(boolean, boolean, boolean) IS
+'Export metagration scripts as SQL file that can be loaded into fresh
+database. ';

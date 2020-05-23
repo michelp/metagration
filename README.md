@@ -1,17 +1,17 @@
 # Metagration: PostgreSQL Migrator in PostgreSQL
 
-Metagration is a PostgreSQL migration tool written in the plpgsql
-PostgreSQL scripting language.  Metagrations are stored and applied
-in-database by the database.  Metagration has support for 100% of
-PostgreSQL's features, because it *is* PostgreSQL.
-
-  - No external tools, any PostgreSQL client can drive.
-
-  - Cloud-friendly single 400 line SQL file for any PostgreSQL > 10.
+Metagration is a PostgreSQL migration tool written in PostgreSQL.
+Metagration scripts are stored and applied in-database by the
+database.  Metagration has support for 100% of PostgreSQL's features,
+because it *is* PostgreSQL.
 
   - Up/Down scripts are stored procedures in any pl language.
 
-  - One simple function for new plpgsql scripts.
+  - No external tools, any PostgreSQL client can drive.
+
+  - Cloud-friendly single ~400 line SQL file for any PostgreSQL > 10.
+
+  - One simple function for new SQL scripts.
 
   - Procedures are transactional, and transaction aware.
 
@@ -23,22 +23,21 @@ PostgreSQL's features, because it *is* PostgreSQL.
 
   - Postgres docker container entrypoint friendly.
 
-  - Useable by extensions for enhanced upgrading.
-
 ## How does it work?
 
-Scripts are stored procedures run *in revision order*.  This means
-that revision 2 is always run after 1, and before 3 when going up, and
-the opposite when going down.  It is not possible to insert "in
-between" two existing revisions, even if their revisions are not
-consecutive.  A `BEFORE INSERT` trigger enforces that new scripts must
-have a revision > max(revision) for all existing scripts.  While you
-can disable this trigger to bulk import revisions you will be
-responsible for their revision order being correct.
+Metagration scripts are stored procedures run *in revision order*.
+This means that revision 2 is always run after 1, and before 3 when
+migrating forward, and the opposite when going backwards.  It is not
+possible to insert "in between" two existing revisions, even if their
+revisions are not consecutive.  A `BEFORE INSERT` trigger enforces
+that new scripts must have a `revision > max(revision)` for all
+existing scripts.  While you can disable this trigger to bulk import
+revisions you will be responsible for their revision order being
+correct.
 
-When a script is created with `metagration.create()` the up and down
+When a script is created with `metagration.new_script()` the up and down
 code are substituted into the body dynamically generated plpgsql
-procedure.  You don't have to use `create()`, a script can be written
+procedure.  You don't have to use `new_script()`, a script can be written
 in any supported language that can write stored procedures, such as
 python and javascript.
 
@@ -70,16 +69,16 @@ Metagration comes with a simple create function for writing fast up
 and down scripts in plpgsql, which often look exactly like their SQL
 counterparts:
 
-    # SELECT metagration.create(
+    # SELECT metagration.new_script(
           'create table public.foo (id bigserial)',
           'drop table public.foo'
           );
-     create
+     new_script
     --------
           1
 
 This creates a new revision `1`.  The function
-`metagration.create(up[, down])` expands the up and down code into
+`metagration.new_script(up[, down])` expands the up and down code into
 dynamically created plpgsql functions.  Once the script is created, it
 can then be run with `metagration.run()`
 
@@ -93,11 +92,11 @@ can then be run with `metagration.run()`
 
 Now add another script with an unfortunate table name to be reverted:
 
-    # SELECT metagration.create(
+    # SELECT metagration.new_script(
         'create table public.bad (id bigserial)',
         'drop table public.bad
         );
-     create
+     new_script
     --------
           2
     postgres=# CALL metagration.run();
