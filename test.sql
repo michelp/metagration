@@ -9,9 +9,9 @@
 
 CREATE EXTENSION pgtap;
 
-SET search_path = pgtap, metagration, public;
+SET search_path = public, pgtap, metagration;
 
-SELECT plan(86);
+SELECT plan(95);
 
 SELECT lives_ok($$
 SELECT new_script(
@@ -211,16 +211,35 @@ $down$
     END LOOP
 $down$,
     up_declare:='i bigint',
-    down_declare:='i bigint'
+    down_declare:='i bigint',
+    args:=jsonb_build_object('target', 3)
     );
 $$, 'CREATE forks script');
 
-CALL run(args:=jsonb_build_object('target', 3));
+CALL run();
 
 SELECT has_table('forks_1'::name, 'forks_1 exists');
 SELECT has_table('forks_2'::name, 'forks_2 exists');
 SELECT has_table('forks_3'::name, 'forks_3 exists');
 
+CALL run('-1');
+
+SELECT hasnt_table('forks_1'::name, 'no forks_1');
+SELECT hasnt_table('forks_2'::name, 'no forks_2');
+SELECT hasnt_table('forks_3'::name, 'no forks_3');
+
+CALL run('+1', args:=jsonb_build_object('target', 2));
+
+SELECT has_table('forks_1'::name, 'forks_1 exists');
+SELECT has_table('forks_2'::name, 'forks_2 exists');
+SELECT hasnt_table('forks_3'::name, 'no forks_3');
+
+CALL run('-1', args:=jsonb_build_object('target', 2));
+
+SELECT hasnt_table('forks_1'::name, 'no forks_1');
+SELECT hasnt_table('forks_2'::name, 'no forks_2');
+SELECT hasnt_table('forks_3'::name, 'no forks_3');
+    
 SELECT * from log order by migration_start;
 
 SELECT * FROM finish();
