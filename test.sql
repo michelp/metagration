@@ -8,6 +8,7 @@
 -- \set QUIET 1
 
 CREATE EXTENSION pgtap;
+CREATE EXTENSION plpython3u;
 
 SET search_path = public, pgtap, metagration;
 
@@ -239,7 +240,7 @@ CALL run('-1', args:=jsonb_build_object('target', 2));
 SELECT hasnt_table('forks_1'::name, 'no forks_1');
 SELECT hasnt_table('forks_2'::name, 'no forks_2');
 SELECT hasnt_table('forks_3'::name, 'no forks_3');
-    
+
 SELECT * from log order by migration_start;
 
 SELECT * FROM finish();

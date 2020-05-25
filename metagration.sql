@@ -1,6 +1,5 @@
 DROP SCHEMA IF EXISTS metagration CASCADE;
 CREATE SCHEMA metagration;
-
 CREATE SCHEMA IF NOT EXISTS metagration_scripts;
 
 CREATE TABLE metagration.script (
@@ -284,9 +283,9 @@ END;$f$, script);
 END;$$;
 
 CREATE OR REPLACE FUNCTION metagration._build_proc(
-    use_schema  text,
-    script_name text,
-    body        text)
+    use_schema      text,
+    script_name     text,
+    script_body     text)
     RETURNS text LANGUAGE plpgsql AS $$
 BEGIN
 RETURN format(
@@ -295,7 +294,7 @@ CREATE OR REPLACE PROCEDURE %I.%I
     (args jsonb='{}') LANGUAGE plpgsql AS $%s$
 %s
 $%s$;
-$f$, use_schema, script_name, script_name, body, script_name);
+$f$, use_schema, script_name, script_name, script_body, script_name);
 END;
 $$;
 
@@ -339,10 +338,10 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION metagration._get_source(
+CREATE OR REPLACE FUNCTION metagration._get_sourcedef(
     proc_schema text, proc_name text)
 RETURNS text LANGUAGE sql AS $$
-    SELECT prosrc
+    SELECT pg_get_functiondef(p.oid) || ';'
         FROM pg_proc p, pg_namespace n
         WHERE p.pronamespace = n.oid
         AND p.proname=proc_name
@@ -359,6 +358,7 @@ DECLARE
     current_script metagration.script;
     buffer         text='';
     proc_source    text;
+    proc_language  text;
 BEGIN
     IF transactional THEN
         buffer = buffer || '
@@ -376,21 +376,14 @@ $f$);
         WHERE revision > 0
         ORDER BY revision
     LOOP
-        proc_source = metagration._get_source(
+        buffer = buffer || metagration._get_sourcedef(
             current_script.script_schema,
             current_script.up_script);
-        buffer = buffer || metagration._build_proc(
-            current_script.script_schema,
-            current_script.up_script,
-            proc_source);
+    
         IF current_script.down_script IS NOT null THEN
-            proc_source = metagration._get_source(
+            buffer = buffer || metagration._get_sourcedef(
                 current_script.script_schema,
                 current_script.down_script);
-            buffer = buffer || metagration._build_proc(
-                current_script.script_schema,
-                current_script.down_script,
-                proc_source);
         END IF;
         IF replace_scripts THEN
             buffer = buffer || format(
