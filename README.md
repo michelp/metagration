@@ -41,9 +41,9 @@ metagration is a script defined entirely within the database, there is
 no external migration tool or language.
 
 Metagration `script`s are what move the database from one revision to
-the next.  Forward metagration runs the "up" procedure, and backward
-metagration runs the "down" procedure to undo the "up" operation.
-Script procedures can be written in *any* supported stored procedure
+the next.  Each script has a forward "up" procedure, and optionally a
+backward "down" procedure to undo the "up" operation.  Script
+procedures can be written in *any* supported stored procedure
 language.  Metagration strictly enforces the revision order of the
 scripts applied.
 
@@ -59,7 +59,7 @@ counterparts:
     --------
           1
 
-This creates a new revision `1`.  The function
+This creates a new script with revision `1`.  The function
 `metagration.new_script(up[, down])` expands the up and down code into
 dynamically created plpgsql functions.  Once the script is created, it
 can then be run with `metagration.run()`
@@ -154,12 +154,12 @@ variable `i` in the `FOR` loops are declared in the `up_declare` and
     SELECT new_script(
     $up$
         FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
-            EXECUTE format('CREATE TABLE %I (id serial)', 'forks_' || i);
+            EXECUTE format('CREATE TABLE %I (id serial)', 'foo_' || i);
         END LOOP
     $up$,
     $down$
         FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
-            EXECUTE format('DROP TABLE %I', 'forks_' || i);
+            EXECUTE format('DROP TABLE %I', 'foo_' || i);
         END LOOP
     $down$,
         up_declare:='i bigint',
@@ -171,11 +171,11 @@ To run, pass an integer value for the `target` jsonb key in `args`:
     # CALL metagration.run(args:=jsonb_build_object('target', 3));
     # \dt+
                           List of relations
-     Schema |  Name   | Type  |  Owner   |  Size   | Description 
-    --------+---------+-------+----------+---------+-------------
-     public | forks_1 | table | postgres | 0 bytes | 
-     public | forks_2 | table | postgres | 0 bytes | 
-     public | forks_3 | table | postgres | 0 bytes | 
+     Schema |  Name | Type  |  Owner   |  Size   | Description 
+    --------+-------+-------+----------+---------+-------------
+     public | foo_1 | table | postgres | 0 bytes | 
+     public | foo_2 | table | postgres | 0 bytes | 
+     public | foo_3 | table | postgres | 0 bytes | 
      
 If your up script depends on `args`, it's likely your down scripts do
 too.  Pass them as well to revert or, get the args used in the up
@@ -200,26 +200,26 @@ migration from the `migration.log` table where they are saved.
 
 The obvious question is, if metagrations are stored procedures that
 makes DDL changes, who CREATEs the metagrations?  They can be created
-programatically as shown above with `new_script`, or they can be
-import and exported using any SQL client or tool.
+programatically as shown above with `new_script` or by inserting
+directly into the `metagraiton.script` table. They can be imported and
+exported using any PostgreSQL client or admin tool.  Because
+metagrations are in-database, they are dumped and restored when the
+database is backed up.
 
 You can still check your metagrations into source control and stream
 them into a new database when you initialize it, then call
 `metagrate.run()`.
 
-Because metagrations are in-database, they are dumped and restored
-when the database is backed up.
-
-Since this process is *decoupled* from the actual migration, it can be
-done using any of the many database management tools for
-PostgreSQL. Because metagration scripts are stored procedures, they
-are stateless database objects that can be exported, imported, dropped
-and re-created as necessary.
+Since this process of creating metagrations is *decoupled* from the
+actual act of migration, it can be done using any of the many database
+management tools for PostgreSQL. Because metagration scripts are
+stored procedures, they are stateless database objects that can be
+exported, imported, dropped and re-created as necessary.
 
 A helpful tool for doing this `metagration.export()`.  The `export()`
 function will generate SQL script file that `CREATE OR REPLACE`s the
-migration scripts. Simply capture the output of this function, for
-example with:
+migration scripts and optionally clear and run them. Simply capture
+the output of this function, for example with:
 
     psql -A -t -U postgres -c 'select metagration.export()' > export_file.sql
 
