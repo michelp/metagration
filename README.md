@@ -78,8 +78,8 @@ and down scripts in plpgsql, which often look exactly like their SQL
 counterparts:
 
     # SELECT metagration.new_script(
-          'CREATE TABLE public.foo (id bigserial)',
-          'DROP TABLE public.foo'
+          'CREATE TABLE public.foo (id bigserial);',
+          'DROP TABLE public.foo;'
           );
      new_script
     --------
@@ -100,8 +100,8 @@ can then be run with `metagration.run()`
 Now add another script with an unfortunate table name to be reverted:
 
     # SELECT metagration.new_script(
-        'CREATE TABLE public.bad (id bigserial)',
-        'DROP TABLE public.bad
+        'CREATE TABLE public.bad (id bigserial);',
+        'DROP TABLE public.bad;
         );
      new_script
     --------
@@ -181,12 +181,12 @@ variable `i` in the `FOR` loops are declared in the `up_declare` and
     $up$
         FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
             EXECUTE format('CREATE TABLE %I (id serial)', 'foo_' || i);
-        END LOOP
+        END LOOP;
     $up$,
     $down$
         FOR i IN (SELECT * FROM generate_series(1, (args->>'target')::bigint, 1)) LOOP
             EXECUTE format('DROP TABLE %I', 'foo_' || i);
-        END LOOP
+        END LOOP;
     $down$,
         up_declare:='i bigint',
         down_declare:='i bigint'
