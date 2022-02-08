@@ -5,6 +5,7 @@ on:
 jobs:
   release:
     name: Release on GitHub and PGXN
+    environment: test
     runs-on: ubuntu-latest
     container: pgxn/pgxn-tools
     env:

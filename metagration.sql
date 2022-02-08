@@ -8,6 +8,7 @@ CREATE TABLE metagration.script (
     script_schema text NOT null DEFAULT 'metagration_scripts',
     up_script     text,
     down_script   text,
+    test_script   text,
     args          jsonb,
     comment       text
 );
