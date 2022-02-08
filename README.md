@@ -2,7 +2,25 @@
 
 <br />
 
-# Metagration: PostgreSQL Migrator in PostgreSQL
+<p align="center">
+  <img src="metagration.png" />
+</p>
+
+# Metagration: Logical PostgreSQL Migration
+
+Migrating logically replicated PostgreSQL databases is a delicate
+dance of applying the right script at the right time, and enduring
+possible downtime making sure replicas are correctly up to date.
+Consider the [*warnings from the
+documentation*](https://www.postgresql.org/docs/10/logical-replication-restrictions.html):
+
+  - The database schema and DDL commands are not replicated. The
+    initial schema can be copied by hand using pg_dump
+    --schema-only. Subsequent schema changes would need to be kept in
+    sync manually.
+    
+  
+
 
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
 
