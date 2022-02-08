@@ -4,7 +4,7 @@ SELECT new_script(
     'CREATE TABLE laa (bar int);',
     down_script:='DROP TABLE laa;',
     test_script:=$test$
-    RAISE NOTICE '%', metagration.assert(has_table('laa'::name, 'Verify laa exists'));
+    CALL metagration.assert(has_table('laa'::name, 'Verify laa exists'));
     $test$
     );
 $$, 'CREATE laa script with test');

@@ -273,11 +273,11 @@ COMMENT ON PROCEDURE metagration.run(text, jsonb, boolean) IS
 revision using relative notation -1 to go back one, +3 to go forward
 3, etc...';
 
-CREATE OR REPLACE FUNCTION metagration.assert(result text)
-    RETURNS text LANGUAGE plpgsql AS $$
+CREATE OR REPLACE PROCEDURE metagration.assert(result text)
+    LANGUAGE plpgsql AS $$
 BEGIN
     ASSERT starts_with(result, 'ok');
-    RETURN result;
+    RAISE NOTICE '%', result;
 END;
 $$;
 
