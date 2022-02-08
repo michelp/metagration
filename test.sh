@@ -32,6 +32,6 @@ do sleep 1;
 done
 
 echo running tests
-$EXEC psql -U "$SU" -f /metagration/test.sql
+$EXEC psql -U "$SU" -f /metagration/test/test.sql
 
 # docker rmi metagration/test

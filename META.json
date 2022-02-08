@@ -10,7 +10,7 @@
     "provides": {
         "metagration": {
             "abstract": "Migrate Postgres with Postgres",
-            "file": "metagration.sql",
+            "file": "sql/metagration.sql",
             "docfile": "README.md",
             "version": "1.0.1"
         }
