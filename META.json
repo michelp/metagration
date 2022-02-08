@@ -7,6 +7,14 @@
       "Michel Pelletier <michel@graphegon.com>"
    ],
    "license": "postgresql",
+    "provides": {
+        "metagration": {
+            "abstract": "Migrate Postgres with Postgres",
+            "file": "metagration.sql",
+            "docfile": "README.md",
+            "version": "1.0.0"
+        }
+    },
    "prereqs": {
       "runtime": {
          "requires": {
