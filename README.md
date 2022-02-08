@@ -11,8 +11,8 @@
 Migrating logically replicated PostgreSQL databases is a delicate
 dance of applying the right script at the right time, and enduring
 possible downtime making sure replicas are correctly up to date.
-Consider the [*warnings from the
-documentation*](https://www.postgresql.org/docs/current/logical-replication-restrictions.html):
+Consider the [warnings from the
+documentation](https://www.postgresql.org/docs/current/logical-replication-restrictions.html):
 
   - The database schema and DDL commands are not replicated. The
     initial schema can be copied by hand using pg_dump
@@ -22,21 +22,22 @@ documentation*](https://www.postgresql.org/docs/current/logical-replication-rest
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
 Metagration "up/down" scripts are stored procedures and applied
 in-database by the database.  Creating and managing metagrations and
-actually running them are *completely decoupled*.  
+actually running them are *completely decoupled*.
 
-Metagrations can be managed, *and replicated* like any other data in
-your database using whatever favorite tool you are already familar
-with.  Using tools like
-[pglogical](https://github.com/2ndQuadrant/pglogical) you can apply
-metagrations across logically replicated cluster at the exact same
-point in time in the WAL stream.  Metagration keeps track of [restore
+Metagrations can be managed and replicated like any other data in your
+database using whatever favorite tool you are already familar with.
+Using tools like [pglogical](https://github.com/2ndQuadrant/pglogical)
+you can then apply metagrations across logically replicated cluster at
+the exact same point in time in the WAL stream.  Metagration keeps
+track of [restore
 points](https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-BACKUP)
 before all changes so entire clusters can be
-[Point-In-Time-Recovered]() to the same point in the transcation log,
-avoiding migration induced conflict errors.
+[Point-In-Time-Recovered](https://www.postgresql.org/docs/14/continuous-archiving.html)
+to the same point in the transcation log, avoiding migration induced
+conflict errors.
 
-Metagration has support for 100% of PostgreSQL's features, because it
-*is* PostgreSQL:
+**Metagration has support for 100% of PostgreSQL's features, because it
+*is* PostgreSQL**:
 
   - Up/Down scripts are stored procedures in any pl language.
 
