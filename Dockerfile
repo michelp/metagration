@@ -4,4 +4,4 @@ RUN mkdir "/metagration"
 RUN mkdir "/archivedir"
 WORKDIR "/metagration"
 COPY . .
-COPY metagration.sql /docker-entrypoint-initdb.d/
+COPY sql/metagration.sql /docker-entrypoint-initdb.d/
