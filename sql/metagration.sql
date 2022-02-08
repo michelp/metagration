@@ -91,7 +91,8 @@ revision';
 CREATE OR REPLACE PROCEDURE metagration.run_up(
     revision_start bigint,
     revision_end   bigint,
-    args           jsonb='{}')
+    args           jsonb='{}',
+    verify         boolean=true)
     LANGUAGE plpgsql AS $$
 DECLARE
     current_script metagration.script;
@@ -108,6 +109,15 @@ BEGIN
             current_script.up_script)
         USING current_script.args || args;
 
+        IF verify AND current_script.test_script IS NOT null THEN
+            COMMIT;
+            EXECUTE format(
+                'CALL %I.%I($1)',
+                current_script.script_schema,
+                current_script.test_script)
+            USING current_script.args || args;
+            ROLLBACK;
+        END IF;
         UPDATE metagration.script
             SET is_current = false WHERE is_current;
         UPDATE metagration.script
@@ -117,7 +127,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON PROCEDURE metagration.run_up(bigint, bigint, jsonb) IS
+COMMENT ON PROCEDURE metagration.run_up(bigint, bigint, jsonb, boolean) IS
 'Apply up scripts from start to end revisions.';
 
 CREATE OR REPLACE PROCEDURE metagration.run_down(
@@ -155,7 +165,7 @@ $$;
 COMMENT ON PROCEDURE metagration.run_down(bigint, bigint, jsonb) IS
 'Apply down scripts from start to end revisions.';
 
-CREATE OR REPLACE PROCEDURE metagration.run(run_to bigint=null, args jsonb='{}')
+CREATE OR REPLACE PROCEDURE metagration.run(run_to bigint=null, args jsonb='{}', verify boolean=true)
     LANGUAGE plpgsql AS $$
 DECLARE
     current_revision  bigint;
@@ -199,7 +209,7 @@ BEGIN
         replace(clock_now::text, ' ', '|'));
     SELECT pg_create_restore_point(restore_point) INTO restore_point_lsn;
     IF revision_start < revision_end THEN
-       CALL metagration.run_up(revision_start, revision_end, args);
+       CALL metagration.run_up(revision_start, revision_end, args, verify=verify);
     ELSE
        CALL metagration.run_down(revision_start, revision_end, args);
     END IF;
@@ -224,11 +234,11 @@ BEGIN
 END;
 $$;
 
-COMMENT ON PROCEDURE metagration.run(bigint, jsonb) IS
+COMMENT ON PROCEDURE metagration.run(bigint, jsonb, boolean) IS
 'Run from thecurrent revision, forwards or backwards to the target
 revision.';
 
-CREATE OR REPLACE PROCEDURE metagration.run(run_to text, args jsonb='{}')
+CREATE OR REPLACE PROCEDURE metagration.run(run_to text, args jsonb='{}', verify boolean=true)
     LANGUAGE plpgsql AS $$
 DECLARE
     revision_start bigint;
@@ -254,14 +264,44 @@ BEGIN
      IF revision_end IS null THEN
          RAISE 'No revision % away', run_to;
      END IF;
-     CALL metagration.run(revision_end, args);
+     CALL metagration.run(revision_end, args, verify=verify);
 END;
 $$;
 
-COMMENT ON PROCEDURE metagration.run(text, jsonb) IS
+COMMENT ON PROCEDURE metagration.run(text, jsonb, boolean) IS
 'Run from the current revision, forwards or backwards to the target
 revision using relative notation -1 to go back one, +3 to go forward
 3, etc...';
+
+CREATE OR REPLACE FUNCTION metagration.assert(result text)
+    RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    ASSERT starts_with(result, 'ok');
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE metagration.verify()
+    LANGUAGE plpgsql AS $$
+DECLARE
+    current_script metagration.script;
+BEGIN
+    FOR current_script IN
+        SELECT * FROM metagration.script
+        ORDER BY revision ASC
+    LOOP
+        IF current_script.test_script IS NOT null THEN
+            EXECUTE format(
+                'CALL %I.%I($1)',
+                current_script.script_schema,
+                current_script.test_script)
+            USING current_script.args;
+        END IF;
+    END LOOP;
+END;
+$$;
+
+COMMENT ON PROCEDURE metagration.verify() IS
+'Verify all revisions.';
 
 CREATE OR REPLACE FUNCTION metagration._proc_body(script_declare text, script text)
     RETURNS text LANGUAGE plpgsql AS $$
@@ -277,7 +317,7 @@ $f$, script_declare);
     
     buffer = buffer || format($f$
 BEGIN
-    %s;
+    %s
     RETURN;
 END;$f$, script);
     RETURN buffer;
@@ -302,8 +342,10 @@ $$;
 CREATE OR REPLACE FUNCTION metagration.new_script(
     up_script    text,
     down_script  text=null,
+    test_script  text=null,
     up_declare   text=null,
     down_declare text=null,
+    test_declare text=null,
     args         jsonb='{}',
     use_schema   text='metagration_scripts',
     comment      text=null)
@@ -313,6 +355,7 @@ DECLARE
     this      metagration.script;
     up_name   text;
     down_name text = null;
+    test_name text = null;
 BEGIN
     INSERT INTO metagration.script
         (args, script_schema, comment)
@@ -327,13 +370,21 @@ BEGIN
             down_name,
             metagration._proc_body(down_declare, down_script));
     END IF;
+    if test_script IS NOT null THEN
+        test_name = '_' || this.revision || '_' || 'test';
+        EXECUTE metagration._build_proc(
+            use_schema,
+            test_name,
+            metagration._proc_body(test_declare, test_script));
+    END IF;
     EXECUTE metagration._build_proc(
        use_schema,
        up_name,
        metagration._proc_body(up_declare, up_script));
     UPDATE metagration.script
     SET up_script = up_name,
-        down_script = down_name
+        down_script = down_name,
+        test_script = test_name
     WHERE revision = this.revision;
     RETURN this.revision;
 END;
