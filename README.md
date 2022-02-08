@@ -1,4 +1,4 @@
-[![Build Status](https://api.travis-ci.com/michelp/metagration.svg?branch=master)](https://travis-ci.com/github/michelp/metagration)
+[![Tests](https://github.com/michelp/metagration/actions/workflows/test.yml/badge.svg)](https://github.com/michelp/metagration/actions/workflows/test.yml)
 
 <br />
 
