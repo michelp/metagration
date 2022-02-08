@@ -12,24 +12,31 @@ Migrating logically replicated PostgreSQL databases is a delicate
 dance of applying the right script at the right time, and enduring
 possible downtime making sure replicas are correctly up to date.
 Consider the [*warnings from the
-documentation*](https://www.postgresql.org/docs/10/logical-replication-restrictions.html):
+documentation*](https://www.postgresql.org/docs/current/logical-replication-restrictions.html):
 
   - The database schema and DDL commands are not replicated. The
     initial schema can be copied by hand using pg_dump
     --schema-only. Subsequent schema changes would need to be kept in
     sync manually.
     
-  
-
-
 Metagration is a PostgreSQL migration tool written in PostgreSQL.
-
 Metagration "up/down" scripts are stored procedures and applied
 in-database by the database.  Creating and managing metagrations and
-actually running them are *completely decoupled*.  Metagrations can be
-managed like any other data in your database using whatever favorite
-tool you are already familar with. Metagration has support for 100% of
-PostgreSQL's features, because it *is* PostgreSQL.
+actually running them are *completely decoupled*.  
+
+Metagrations can be managed, *and replicated* like any other data in
+your database using whatever favorite tool you are already familar
+with.  Using tools like
+[pglogical](https://github.com/2ndQuadrant/pglogical) you can apply
+metagrations across logically replicated cluster at the exact same
+point in time in the WAL stream.  Metagration keeps track of [restore
+points](https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-BACKUP)
+before all changes so entire clusters can be
+[Point-In-Time-Recovered]() to the same point in the transcation log,
+avoiding migration induced conflict errors.
+
+Metagration has support for 100% of PostgreSQL's features, because it
+*is* PostgreSQL:
 
   - Up/Down scripts are stored procedures in any pl language.
 
@@ -151,7 +158,7 @@ restore points are stored in the `metagration.log` table:
                   1 |            4 | 2020-05-13 23:13:02.852157+00 | 2020-05-13 23:13:02.858205+00 |  505 | 1|4|2020-05-13|23:13:02.852157+00 | 0/1846790
 
 Before each metagration a recovery restore point is created with
-[`pg_create_restore_point`](https://www.postgresql.org/docs/12/functions-admin.html#FUNCTIONS-ADMIN-BACKUP)
+[`pg_create_restore_point`](https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-BACKUP)
 and can be used for Point In Time Recovery to the point just before
 the migration and other recovery tasks.  The current transaction id is
 also saved.
@@ -243,7 +250,7 @@ the output of this function, for example with:
 
 And then check it in to your source control.  The scripts can then be
 imported with
-[`psql`](https://www.postgresql.org/docs/12/app-psql.html) or any
+[`psql`](https://www.postgresql.org/docs/current/app-psql.html) or any
 other PostgreSQL client:
 
     psql < export_file.sql
