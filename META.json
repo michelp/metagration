@@ -1,0 +1,37 @@
+{
+   "name": "metagration",
+   "abstract": "Migrate Postgres with Postgres",
+   "description": "This extension provides a powerful Postgres migration tool written in Postgres itself.",
+   "version": "1.0.0",
+   "maintainer": [
+      "Michel Pelletier <michel@graphegon.com>"
+   ],
+   "license": "postgresql",
+   "prereqs": {
+      "runtime": {
+         "requires": {
+            "PostgreSQL": "10"
+         }
+      }
+   },
+   "resources": {
+      "bugtracker": {
+         "web": "https://github.com/michelp/metagration/issues/"
+      },
+      "repository": {
+        "url":  "git://github.com/michelp/metagration.git",
+        "web":  "https://github.com/michelp/metagration/",
+        "type": "git"
+      }
+   },
+   "generated_by": "Michel Pelletier",
+   "meta-spec": {
+      "version": "1.0.0",
+      "url": "https://pgxn.org/meta/spec.txt"
+   },
+   "tags": [
+       "migration",
+       "replication",
+       "pgtap"
+   ]
+}
