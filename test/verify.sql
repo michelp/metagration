@@ -2,8 +2,8 @@
 SELECT lives_ok($$
 SELECT new_script(
     'CREATE TABLE laa (bar int);',
-    'DROP TABLE laa;',
-    $test$
+    down_script:='DROP TABLE laa;',
+    test_script:=$test$
     RAISE NOTICE '%', metagration.assert(has_table('laa'::name, 'Verify laa exists'));
     $test$
     );
