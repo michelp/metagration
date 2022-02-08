@@ -20,6 +20,8 @@ jobs:
       run: pgxn-bundle
     - name: Release on PGXN
       run: pgxn-release
+    - name: Generate Release Changes
+      run: make latest-changes.md
     - name: Create GitHub Release
       id: release
       uses: actions/create-release@v1
