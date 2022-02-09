@@ -43,7 +43,7 @@ conflict errors.
 
   - No external tools, any PostgreSQL client can manage metagrations.
 
-  - Cloud-friendly single ~400 line SQL file for any PostgreSQL >= 11.
+  - Cloud-friendly single ~470 line SQL file for any PostgreSQL >= 11.
 
   - One simple function for new SQL scripts.
 

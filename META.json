@@ -2,7 +2,7 @@
    "name": "metagration",
    "abstract": "Migrate Postgres with Postgres",
    "description": "This extension provides a powerful Postgres migration tool written in Postgres itself.",
-   "version": "1.0.4",
+   "version": "1.0.5",
    "maintainer": [
       "Michel Pelletier <michel@graphegon.com>"
    ],
@@ -12,13 +12,13 @@
             "abstract": "Migrate Postgres with Postgres",
             "file": "sql/metagration.sql",
             "docfile": "README.md",
-            "version": "1.0.4"
+            "version": "1.0.5"
         }
     },
    "prereqs": {
       "runtime": {
          "requires": {
-            "PostgreSQL": "10.0.0"
+            "PostgreSQL": "11.0.0"
          }
       }
    },

@@ -8,7 +8,6 @@
 -- \set QUIET 1
 
 CREATE EXTENSION pgtap;
-CREATE EXTENSION plpython3u;
 
 SET search_path = public, pgtap, metagration;
 

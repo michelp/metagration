@@ -4,7 +4,8 @@ SELECT new_script(
     'CREATE TABLE laa (bar int);',
     down_script:='DROP TABLE laa;',
     test_script:=$test$
-    CALL metagration.assert(has_table('laa'::name, 'Verify laa exists'));
+        CALL metagration.assert(has_table('laa'::name, 'Verify laa exists'));
+        RAISE NOTICE 'hi this is the test script calling.';
     $test$
     );
 $$, 'CREATE laa script with test');
@@ -22,5 +23,6 @@ BEGIN
     CALL metagration.verify();
 EXCEPTION
     WHEN assert_failure THEN
-        RAISE NOTICE 'expected failure it''s all good';
-END$$;
+        RAISE NOTICE 'expected failure';
+END
+$$;
