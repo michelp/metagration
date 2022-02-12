@@ -18,11 +18,4 @@ CALL metagration.verify();  -- no exception
 
 DROP TABLE laa;  -- do something evil without a migration
 
-DO $$
-BEGIN
-    CALL metagration.verify();
-EXCEPTION
-    WHEN assert_failure THEN
-        RAISE NOTICE 'expected failure';
-END
-$$;
+select throws_ok('CALL metagration.verify()');
