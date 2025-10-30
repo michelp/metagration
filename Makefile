@@ -1,21 +1,22 @@
-EXTENSION    = $(shell grep -m 1 '"name":' META.json | \
-               sed -e 's/[[:space:]]*"name":[[:space:]]*"\([^"]*\)",/\1/')
-EXTVERSION   = $(shell grep -m 1 '[[:space:]]\{8\}"version":' META.json | \
-               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
-DISTVERSION  = $(shell grep -m 1 '[[:space:]]\{3\}"version":' META.json | \
-               sed -e 's/[[:space:]]*"version":[[:space:]]*"\([^"]*\)",\{0,1\}/\1/')
+# Metagration TLE Build System
 
-DATA 		 = $(wildcard sql/*--*.sql)
-TESTS        = $(wildcard test/sql/*.sql)
-PG_CONFIG   ?= pg_config
+.PHONY: tle test clean help
 
-PGXS := $(shell $(PG_CONFIG) --pgxs)
-include $(PGXS)
+help:
+	@echo "Metagration TLE Build Targets:"
+	@echo "  make tle     - Build TLE installer (install-tle.sql)"
+	@echo "  make test    - Build and run full test suite"
+	@echo "  make clean   - Remove generated files"
 
-all: sql/$(EXTENSION)--$(EXTVERSION).sql
+tle:
+	@echo "Building TLE installer..."
+	python3 build-tle.py
 
-sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql
-	cp $< $@
+test: tle
+	@echo "Running test suite..."
+	./test.sh
 
-dist:
-	git archive --format zip --prefix=$(EXTENSION)-$(DISTVERSION)/ -o $(EXTENSION)-$(DISTVERSION).zip HEAD
+clean:
+	@echo "Cleaning generated files..."
+	rm -f install-tle.sql
+	@echo "Clean complete"
