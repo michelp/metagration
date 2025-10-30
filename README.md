@@ -320,7 +320,7 @@ CREATE EXTENSION metagration;
 
 ```sql
 DROP EXTENSION metagration CASCADE;
-SELECT pg_tle.uninstall_extension('metagration');
+SELECT pgtle.uninstall_extension('metagration');
 ```
 
 ### Development

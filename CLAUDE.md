@@ -72,7 +72,7 @@ CREATE EXTENSION metagration;
 
 # Uninstall:
 DROP EXTENSION metagration CASCADE;
-SELECT pg_tle.uninstall_extension('metagration');
+SELECT pgtle.uninstall_extension('metagration');
 ```
 
 ## Important Constraints
