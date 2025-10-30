@@ -1,37 +1,42 @@
 #!/bin/bash
+# Test script for metagration TLE
+# NOTE: This script requires install-tle.sql - run 'make test' instead of './test.sh' directly
 
 DB_HOST="metagration-test-db"
 DB_NAME="postgres"
 SU="postgres"
 EXEC="docker exec $DB_HOST"
 
-echo destroying test container and image
-docker rm --force "$DB_HOST"
+echo "Destroying test container"
+docker rm --force "$DB_HOST" 2>/dev/null || true
 
 set -e
 
-echo building test image
+echo "Building test image"
 docker build . -t metagration/test
 
-echo running test container
+echo "Running test container"
 docker run -e POSTGRES_HOST_AUTH_METHOD=trust -d \
-       -v `pwd`:/metagration                     \
-       --name "$DB_HOST"                         \
-       metagration/test                          # \
-       # -c 'wal_level=logical'                    \
-       # -c 'archive_mode=on'                      \
-       # -c "archive_command='test ! -f /archivedir/%f && cp %p /archivedir/%f'"
+       -v "$(pwd)":/metagration \
+       --name "$DB_HOST" \
+       metagration/test
 
-echo waiting for database to accept connections
+echo "Waiting for database to accept connections"
 until
     $EXEC \
-	    psql -o /dev/null -t -q -U "$SU" \
+        psql -o /dev/null -t -q -U "$SU" \
         -c 'select pg_sleep(1)' \
-	    2>/dev/null;
+        2>/dev/null;
 do sleep 1;
 done
 
-echo running tests
+echo "Installing pg_tle extension"
+$EXEC psql -U "$SU" -d "$DB_NAME" -c "CREATE EXTENSION pg_tle;"
+
+echo "Installing metagration TLE"
+$EXEC psql -U "$SU" -d "$DB_NAME" -f /metagration/install-tle.sql
+
+echo "Running tests"
 $EXEC psql -U "$SU" -f /metagration/test/test.sql
 
-# docker rmi metagration/test
+echo "All tests passed!"
