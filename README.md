@@ -43,7 +43,7 @@ conflict errors.
 
   - No external tools, any PostgreSQL client can manage metagrations.
 
-  - Cloud-friendly single ~470 line SQL file for any PostgreSQL >= 11.
+  - Cloud-friendly Trusted Language Extension for PostgreSQL >= 18.
 
   - One simple function for new SQL scripts.
 
@@ -278,6 +278,60 @@ container entry point directory.  The SQL code dumped from
 `/docker-entrypoint-initdb.d/` directory in the container and the
 migrations will be inserted and automatically run when the new
 container is initialized.
+
+## Installation
+
+Metagration is distributed as a Trusted Language Extension (TLE) for PostgreSQL 18+.
+
+### Prerequisites
+
+- PostgreSQL 18 or higher
+- [pg_tle](https://github.com/aws/pg_tle) extension installed
+
+### Installation Steps
+
+1. **Build the TLE installer:**
+
+```bash
+make tle
+```
+
+This generates `install-tle.sql` from the source.
+
+2. **Install pg_tle in your database:**
+
+```sql
+CREATE EXTENSION pg_tle;
+```
+
+3. **Install metagration TLE:**
+
+```bash
+psql your_database -f install-tle.sql
+```
+
+4. **Create the extension:**
+
+```sql
+CREATE EXTENSION metagration;
+```
+
+### Uninstallation
+
+```sql
+DROP EXTENSION metagration CASCADE;
+SELECT pg_tle.uninstall_extension('metagration');
+```
+
+### Development
+
+Run the test suite:
+
+```bash
+make test
+```
+
+This builds the TLE installer and runs all pgTAP tests in Docker.
 
 ## How does it work?
 
