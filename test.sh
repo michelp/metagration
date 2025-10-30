@@ -36,7 +36,10 @@ $EXEC psql -U "$SU" -d "$DB_NAME" -c "CREATE EXTENSION pg_tle;"
 echo "Installing metagration TLE"
 $EXEC psql -U "$SU" -d "$DB_NAME" -f /metagration/install-tle.sql
 
+echo "Creating metagration extension"
+$EXEC psql -U "$SU" -d "$DB_NAME" -c "CREATE EXTENSION metagration;"
+
 echo "Running tests"
-$EXEC psql -U "$SU" -f /metagration/test/test.sql
+$EXEC psql -U "$SU" -d "$DB_NAME" -f /metagration/test/test.sql
 
 echo "All tests passed!"
