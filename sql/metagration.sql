@@ -1,4 +1,3 @@
-DROP SCHEMA IF EXISTS metagration CASCADE;
 CREATE SCHEMA metagration;
 CREATE SCHEMA IF NOT EXISTS metagration_scripts;
 
