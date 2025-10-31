@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Version for TLE
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 def read_file(path: Path) -> str:
     """Read file contents as UTF-8 string."""
