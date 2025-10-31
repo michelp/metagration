@@ -1,36 +1,78 @@
 name: Release
+
 on:
   push:
-    tags: [v*]
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
 jobs:
   release:
-    name: Release on GitHub and PGXN
-    environment: test
+    name: Create GitHub Release
     runs-on: ubuntu-latest
-    container: pgxn/pgxn-tools
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      PGXN_USERNAME: ${{ secrets.PGXN_USERNAME }}
-      PGXN_PASSWORD: ${{ secrets.PGXN_PASSWORD }}
     steps:
-    - name: Check out the repo
-      uses: actions/checkout@v2
-    - name: Bundle the Release
-      id: bundle
-      run: pgxn-bundle
-    - name: Release on PGXN
-      run: pgxn-release
-    - name: Create GitHub Release
-      id: release
-      uses: actions/create-release@v1
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        body_path: latest-changes.md
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      with:
-        upload_url: ${{ steps.release.outputs.upload_url }}
-        asset_path: ./${{ steps.bundle.outputs.bundle }}
-        asset_name: ${{ steps.bundle.outputs.bundle }}
-        asset_content_type: application/zip
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build TLE installer
+        run: make tle
+
+      - name: Verify TLE installer was created
+        run: |
+          if [ ! -f install-tle.sql ]; then
+            echo "ERROR: install-tle.sql was not created"
+            exit 1
+          fi
+          echo "install-tle.sql created successfully"
+          ls -lh install-tle.sql
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create release notes
+        id: release_notes
+        run: |
+          if [ -f "docs/CHANGELOG-${{ steps.version.outputs.version }}.md" ]; then
+            echo "Using CHANGELOG-${{ steps.version.outputs.version }}.md"
+            cat "docs/CHANGELOG-${{ steps.version.outputs.version }}.md" > release-notes.md
+          elif [ -f latest-changes.md ] && [ -n "$(grep -v '^[[:space:]]*$' latest-changes.md)" ]; then
+            echo "Using latest-changes.md"
+            cat latest-changes.md > release-notes.md
+          else
+            echo "Creating default release notes"
+            echo "Metagration v${{ steps.version.outputs.version }}" > release-notes.md
+            echo "" >> release-notes.md
+            echo "## Installation" >> release-notes.md
+            echo "" >> release-notes.md
+            echo "\`\`\`sql" >> release-notes.md
+            echo "CREATE EXTENSION pg_tle;" >> release-notes.md
+            echo "\`\`\`" >> release-notes.md
+            echo "" >> release-notes.md
+            echo "\`\`\`bash" >> release-notes.md
+            echo "psql your_database -f install-tle.sql" >> release-notes.md
+            echo "\`\`\`" >> release-notes.md
+            echo "" >> release-notes.md
+            echo "\`\`\`sql" >> release-notes.md
+            echo "CREATE EXTENSION metagration;" >> release-notes.md
+            echo "\`\`\`" >> release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            install-tle.sql
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
