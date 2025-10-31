@@ -83,6 +83,30 @@ SELECT pgtle.uninstall_extension('metagration');
 4. **Test Coverage**: All changes must pass 100 pgTAP tests
 5. **TLE Installation Required**: Must install via `pg_tle.install_extension()` - traditional `CREATE EXTENSION` loading from filesystem not supported in v2.0+
 
+## Security Model
+
+Metagration implements defense-in-depth security:
+
+### search_path Protection
+All functions/procedures set `search_path = metagration, pg_catalog, pg_temp` to prevent injection attacks. This is critical - do not remove these settings.
+
+### Schema Validation
+The `script_schema` column has a CHECK constraint requiring valid PostgreSQL identifiers. This prevents malicious schema injection when executing migration procedures.
+
+### Permission Model
+- All procedures use `SECURITY INVOKER` (run with caller's privileges)
+- Use `metagration.setup_permissions()` to configure role-based access
+- Only trusted users should have migration permissions
+- Migration scripts execute arbitrary SQL by design - this requires trust
+
+### Dynamic SQL Rules
+When modifying code:
+- Use `%I` for identifier quoting (schema/table/column names)
+- Use `%L` for literal quoting (string values)
+- Use `USING` clauses for parameterized queries
+- Never use `%s` for user-controlled identifiers
+- Always set `search_path` in function definitions
+
 ## Core Functionality
 
 ### Migration Script Format

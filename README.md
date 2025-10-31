@@ -333,6 +333,74 @@ make test
 
 This builds the TLE installer and runs all pgTAP tests in Docker.
 
+## Security
+
+Metagration follows PostgreSQL security best practices to protect against SQL injection and privilege escalation attacks.
+
+### Built-in Security Features
+
+1. **search_path Protection**: All functions and procedures use `SET search_path = metagration, pg_catalog, pg_temp` to prevent search_path injection attacks.
+
+2. **Schema Validation**: The `script_schema` column is constrained to valid PostgreSQL identifiers using a CHECK constraint, preventing malicious schema injection.
+
+3. **Identifier Quoting**: All dynamic SQL uses proper quoting with `%I` (identifiers) and `%L` (literals) format specifiers.
+
+4. **SECURITY INVOKER**: All procedures explicitly run with the caller's privileges, following the principle of least privilege.
+
+### Permission Setup
+
+After installation, configure permissions using the provided procedure:
+
+```sql
+-- Create a role for migration management
+CREATE ROLE migration_admin;
+
+-- Configure recommended permissions
+CALL metagration.setup_permissions('migration_admin');
+
+-- Grant the role to trusted users
+GRANT migration_admin TO your_user;
+```
+
+This setup:
+- Revokes PUBLIC access to metagration schemas
+- Grants minimal required permissions to the migration role
+- Allows only authorized users to create and run migrations
+
+### Trust Requirements
+
+**Important**: Metagration allows users to execute arbitrary SQL through migration scripts. This is by design - it's the core feature. Therefore:
+
+- Only grant migration permissions to trusted users
+- Migration scripts execute with the caller's privileges
+- Review migration scripts before running in production
+- Consider using separate roles for different environments (dev/staging/prod)
+
+### Recommendations
+
+1. **Use Dedicated Roles**: Create environment-specific roles:
+   ```sql
+   CREATE ROLE migration_dev;
+   CREATE ROLE migration_prod;
+   ```
+
+2. **Audit Migration Scripts**: Review all scripts in `metagration.script` table:
+   ```sql
+   SELECT revision, comment, up_script, down_script
+   FROM metagration.script
+   WHERE revision > 0
+   ORDER BY revision;
+   ```
+
+3. **Monitor Migration Activity**: Check the log table:
+   ```sql
+   SELECT * FROM metagration.log
+   ORDER BY migration_start DESC
+   LIMIT 10;
+   ```
+
+4. **Test in Staging**: Always test migrations in a non-production environment first.
+
 ## How does it work?
 
 Metagration scripts are stored procedures run *in revision order*.

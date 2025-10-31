@@ -11,7 +11,8 @@ CREATE EXTENSION pgtap;
 
 SET search_path = public, pgtap, metagration;
 
-SELECT plan(100);
+SELECT plan(109);
 \ir core.sql
 \ir verify.sql
+\ir security.sql
 SELECT * FROM finish();

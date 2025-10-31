@@ -18,6 +18,11 @@ COMMENT ON TABLE metagration.script IS
 CREATE UNIQUE INDEX ON metagration.script (is_current)
     WHERE is_current = true;
 
+-- Security: Validate script_schema to prevent malicious schema injection
+ALTER TABLE metagration.script
+ADD CONSTRAINT valid_script_schema
+CHECK (script_schema ~ '^[a-z_][a-z0-9_]*$');
+
 CREATE OR REPLACE FUNCTION metagration.check_script_trigger()
     RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
@@ -54,7 +59,11 @@ COMMENT ON TABLE metagration.script IS
 'Log of metagrations that have been applied, when and their restore points.';
 
 CREATE OR REPLACE FUNCTION metagration.current_revision()
-    RETURNS bigint LANGUAGE sql AS $$
+    RETURNS bigint
+    LANGUAGE sql
+    STABLE
+    SET search_path = metagration, pg_catalog, pg_temp
+    AS $$
     SELECT revision FROM metagration.script WHERE is_current;
 $$;
 
@@ -62,7 +71,11 @@ COMMENT ON FUNCTION metagration.current_revision() IS
 'Returns the current revision or null if no revisions applied.';
 
 CREATE OR REPLACE FUNCTION metagration.previous_revision(from_revision bigint=null)
-    RETURNS bigint LANGUAGE sql AS $$
+    RETURNS bigint
+    LANGUAGE sql
+    STABLE
+    SET search_path = metagration, pg_catalog, pg_temp
+    AS $$
     SELECT revision FROM metagration.script
         WHERE revision < coalesce(from_revision, metagration.current_revision())
         ORDER BY revision DESC
@@ -75,7 +88,11 @@ one supplied.  If no revision is supplied, default to the current
 revision';
 
 CREATE OR REPLACE FUNCTION metagration.next_revision(from_revision bigint=null)
-    RETURNS bigint LANGUAGE sql AS $$
+    RETURNS bigint
+    LANGUAGE sql
+    STABLE
+    SET search_path = metagration, pg_catalog, pg_temp
+    AS $$
     SELECT revision FROM metagration.script
         WHERE revision > coalesce(from_revision, metagration.current_revision())
         ORDER BY revision ASC
@@ -92,10 +109,14 @@ CREATE OR REPLACE PROCEDURE metagration.run_up(
     revision_end   bigint,
     args           jsonb='{}',
     verify         boolean=true)
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    SECURITY INVOKER
+    AS $$
 DECLARE
     current_script metagration.script;
 BEGIN
+    -- Set search_path for security (LOCAL to avoid transaction control conflicts)
+    SET LOCAL search_path = metagration, pg_catalog, pg_temp;
     FOR current_script IN
         SELECT * FROM metagration.script
         WHERE revision > revision_start
@@ -133,10 +154,14 @@ CREATE OR REPLACE PROCEDURE metagration.run_down(
     revision_start bigint,
     revision_end   bigint,
     args           jsonb='{}')
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    SECURITY INVOKER
+    AS $$
 DECLARE
     current_script metagration.script;
 BEGIN
+    -- Set search_path for security (LOCAL to avoid transaction control conflicts)
+    SET LOCAL search_path = metagration, pg_catalog, pg_temp;
     FOR current_script IN
         SELECT * FROM metagration.script
         WHERE revision <= revision_start
@@ -165,7 +190,9 @@ COMMENT ON PROCEDURE metagration.run_down(bigint, bigint, jsonb) IS
 'Apply down scripts from start to end revisions.';
 
 CREATE OR REPLACE PROCEDURE metagration.run(run_to bigint=null, args jsonb='{}', verify boolean=true)
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    SECURITY INVOKER
+    AS $$
 DECLARE
     current_revision  bigint;
     revision_start    bigint;
@@ -174,6 +201,8 @@ DECLARE
     restore_point     text;
     restore_point_lsn pg_lsn;
 BEGIN
+    -- Set search_path for security (LOCAL to avoid transaction control conflicts)
+    SET LOCAL search_path = metagration, pg_catalog, pg_temp;
     LOCK TABLE metagration.script IN SHARE MODE;
     current_revision = metagration.current_revision();
     IF run_to = 0 THEN
@@ -238,12 +267,16 @@ COMMENT ON PROCEDURE metagration.run(bigint, jsonb, boolean) IS
 revision.';
 
 CREATE OR REPLACE PROCEDURE metagration.run(run_to text, args jsonb='{}', verify boolean=true)
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    SECURITY INVOKER
+    AS $$
 DECLARE
     revision_start bigint;
     revision_end bigint;
     delta bigint = run_to::bigint;
 BEGIN
+    -- Set search_path for security (LOCAL to avoid transaction control conflicts)
+    SET LOCAL search_path = metagration, pg_catalog, pg_temp;
     revision_start = metagration.current_revision();
     EXECUTE format($f$
     SELECT revision
@@ -273,7 +306,10 @@ revision using relative notation -1 to go back one, +3 to go forward
 3, etc...';
 
 CREATE OR REPLACE PROCEDURE metagration.assert(result text)
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    SECURITY INVOKER
+    SET search_path = metagration, pg_catalog, pg_temp
+    AS $$
 BEGIN
     ASSERT starts_with(result, 'ok');
     RAISE NOTICE '%', result;
@@ -281,7 +317,10 @@ END;
 $$;
 
 CREATE OR REPLACE PROCEDURE metagration.verify()
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql
+    SECURITY INVOKER
+    SET search_path = metagration, pgtap, public, pg_catalog, pg_temp
+    AS $$
 DECLARE
     current_script metagration.script;
 BEGIN
@@ -304,7 +343,12 @@ COMMENT ON PROCEDURE metagration.verify() IS
 'Verify all revisions.';
 
 CREATE OR REPLACE FUNCTION metagration._proc_body(script_declare text, script text)
-    RETURNS text LANGUAGE plpgsql AS $$
+    RETURNS text
+    LANGUAGE plpgsql
+    IMMUTABLE
+    SECURITY INVOKER
+    SET search_path = metagration, pg_catalog, pg_temp
+    AS $$
 DECLARE
     buffer text = '';
 BEGIN
@@ -327,7 +371,12 @@ CREATE OR REPLACE FUNCTION metagration._build_proc(
     use_schema      text,
     script_name     text,
     script_body     text)
-    RETURNS text LANGUAGE plpgsql AS $$
+    RETURNS text
+    LANGUAGE plpgsql
+    IMMUTABLE
+    SECURITY INVOKER
+    SET search_path = metagration, pg_catalog, pg_temp
+    AS $$
 BEGIN
 RETURN format(
 $f$
@@ -350,7 +399,10 @@ CREATE OR REPLACE FUNCTION metagration.new_script(
     use_schema   text='metagration_scripts',
     comment      text=null)
 RETURNS bigint
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = metagration, pg_catalog, pg_temp
+AS $$
 DECLARE
     this      metagration.script;
     up_name   text;
@@ -392,7 +444,12 @@ $$;
 
 CREATE OR REPLACE FUNCTION metagration._get_sourcedef(
     proc_schema text, proc_name text)
-RETURNS text LANGUAGE sql AS $$
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = metagration, pg_catalog, pg_temp
+AS $$
     SELECT pg_get_functiondef(p.oid) || ';'
         FROM pg_proc p, pg_namespace n
         WHERE p.pronamespace = n.oid
@@ -405,7 +462,10 @@ CREATE OR REPLACE FUNCTION metagration.export(
     transactional boolean=false,
     run_migrations boolean=false)
 RETURNS text
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = metagration, pg_catalog, pg_temp
+AS $$
 DECLARE
     current_script metagration.script;
     buffer         text='';
@@ -467,3 +527,46 @@ $$;
 COMMENT ON FUNCTION metagration.export(boolean, boolean, boolean) IS
 'Export metagration scripts as SQL file that can be loaded into fresh
 database. ';
+
+CREATE OR REPLACE PROCEDURE metagration.setup_permissions(
+    migration_role text DEFAULT 'migration_admin'
+)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = metagration, pg_catalog, pg_temp
+AS $$
+BEGIN
+    -- Revoke all public access to metagration schema
+    EXECUTE format('REVOKE ALL ON SCHEMA metagration FROM PUBLIC');
+    EXECUTE format('REVOKE ALL ON SCHEMA metagration_scripts FROM PUBLIC');
+
+    -- Grant usage on schemas
+    EXECUTE format('GRANT USAGE ON SCHEMA metagration TO %I', migration_role);
+    EXECUTE format('GRANT USAGE ON SCHEMA metagration_scripts TO %I', migration_role);
+
+    -- Grant SELECT to view migration state
+    EXECUTE format('GRANT SELECT ON metagration.script TO %I', migration_role);
+    EXECUTE format('GRANT SELECT ON metagration.log TO %I', migration_role);
+
+    -- Grant INSERT, UPDATE for creating and running migrations
+    EXECUTE format('GRANT INSERT, UPDATE ON metagration.script TO %I', migration_role);
+    EXECUTE format('GRANT INSERT ON metagration.log TO %I', migration_role);
+    EXECUTE format('GRANT USAGE ON SEQUENCE metagration.script_revision_seq TO %I', migration_role);
+
+    -- Grant CREATE on script schema for procedure creation
+    EXECUTE format('GRANT CREATE ON SCHEMA metagration_scripts TO %I', migration_role);
+
+    -- Grant EXECUTE on all functions/procedures
+    EXECUTE format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA metagration TO %I', migration_role);
+    EXECUTE format('GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA metagration TO %I', migration_role);
+
+    RAISE NOTICE 'Permissions configured for role: %', migration_role;
+    RAISE NOTICE 'Users in this role can create and run migrations';
+    RAISE NOTICE 'Consider: GRANT % TO <username>', migration_role;
+END;
+$$;
+
+COMMENT ON PROCEDURE metagration.setup_permissions(text) IS
+'Configure recommended permissions for migration management.
+Creates a restricted permission model where only the specified role
+can create and run migrations. Default role is migration_admin.';
