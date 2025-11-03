@@ -601,7 +601,7 @@ SELECT
         COALESCE(pg_catalog.pg_table_size(c.oid), 0) -
         COALESCE(pg_catalog.pg_indexes_size(c.oid), 0) AS toast_bytes,
     pg_catalog.obj_description(c.oid, 'pg_class') AS comment,
-    s.last_vacuum AS created_at,
+    s.last_vacuum AS last_vacuum,
     s.last_analyze AS last_analyzed,
     (c.relhasindex) AS has_indexes,
     (EXISTS (SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid = c.oid AND tgisinternal = false)) AS has_triggers,
@@ -613,3 +613,235 @@ LEFT JOIN pg_catalog.pg_stat_all_tables s ON s.relid = c.oid
 WHERE c.relkind IN ('r', 'v', 'm', 'f', 'p')
     AND n.nspname NOT IN ('pg_toast')
     AND pg_catalog.has_table_privilege(c.oid, 'SELECT');
+
+-- metagration.columns
+-- Comprehensive column information for all accessible tables
+CREATE VIEW metagration.columns WITH (security_invoker = true) AS
+SELECT
+    c.table_schema AS schema_name,
+    c.table_name,
+    c.column_name,
+    c.ordinal_position,
+    c.data_type,
+    c.udt_name,
+    c.character_maximum_length,
+    c.numeric_precision,
+    c.numeric_scale,
+    (c.is_nullable = 'YES') AS is_nullable,
+    c.column_default,
+    COALESCE(c.is_generated = 'ALWAYS', false) AS is_generated,
+    c.generation_expression,
+    COALESCE(c.is_identity = 'YES', false) AS is_identity,
+    c.identity_generation,
+    c.identity_start::bigint,
+    c.identity_increment::bigint,
+    c.collation_name,
+    pg_catalog.col_description(
+        (c.table_schema || '.' || c.table_name)::regclass::oid,
+        c.ordinal_position
+    ) AS comment
+FROM information_schema.columns c
+WHERE EXISTS (
+    SELECT 1 FROM metagration.relations r
+    WHERE r.schema_name = c.table_schema
+    AND r.relation_name = c.table_name
+);
+
+-- metagration.constraints
+-- All constraint types unified
+CREATE VIEW metagration.constraints WITH (security_invoker = true) AS
+SELECT
+    tc.table_schema AS schema_name,
+    tc.table_name,
+    tc.constraint_name,
+    tc.constraint_type,
+    ARRAY_AGG(kcu.column_name ORDER BY kcu.ordinal_position) FILTER (WHERE kcu.column_name IS NOT NULL) AS column_names,
+    cc.check_clause,
+    ccu.table_schema AS foreign_schema_name,
+    ccu.table_name AS foreign_table_name,
+    ARRAY_AGG(ccu.column_name ORDER BY kcu.position_in_unique_constraint) FILTER (WHERE ccu.column_name IS NOT NULL) AS foreign_column_names,
+    rc.match_option,
+    rc.update_rule,
+    rc.delete_rule,
+    (tc.is_deferrable = 'YES') AS is_deferrable,
+    (tc.initially_deferred = 'YES') AS initially_deferred
+FROM information_schema.table_constraints tc
+LEFT JOIN information_schema.key_column_usage kcu
+    ON tc.constraint_schema = kcu.constraint_schema
+    AND tc.constraint_name = kcu.constraint_name
+    AND tc.table_name = kcu.table_name
+LEFT JOIN information_schema.constraint_column_usage ccu
+    ON tc.constraint_schema = ccu.constraint_schema
+    AND tc.constraint_name = ccu.constraint_name
+LEFT JOIN information_schema.referential_constraints rc
+    ON tc.constraint_schema = rc.constraint_schema
+    AND tc.constraint_name = rc.constraint_name
+LEFT JOIN information_schema.check_constraints cc
+    ON tc.constraint_schema = cc.constraint_schema
+    AND tc.constraint_name = cc.constraint_name
+WHERE EXISTS (
+    SELECT 1 FROM metagration.relations r
+    WHERE r.schema_name = tc.table_schema
+    AND r.relation_name = tc.table_name
+)
+GROUP BY
+    tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type,
+    cc.check_clause, ccu.table_schema, ccu.table_name,
+    rc.match_option, rc.update_rule, rc.delete_rule,
+    tc.is_deferrable, tc.initially_deferred;
+
+-- metagration.tables_detail
+-- Table-specific attributes
+CREATE VIEW metagration.tables_detail WITH (security_invoker = true) AS
+SELECT
+    r.schema_name,
+    r.relation_name AS table_name,
+    CASE c.relpersistence
+        WHEN 'p' THEN 'permanent'
+        WHEN 't' THEN 'temporary'
+        WHEN 'u' THEN 'unlogged'
+    END AS persistence,
+    (c.relkind = 'p' OR c.relispartition) AS is_partitioned,
+    pg_catalog.pg_get_partkeydef(c.oid) AS partition_key
+FROM metagration.relations r
+JOIN pg_catalog.pg_class c ON c.relname = r.relation_name
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace AND n.nspname = r.schema_name
+WHERE r.relation_type IN ('table', 'partition');
+
+-- metagration.views_detail
+-- View-specific attributes
+CREATE VIEW metagration.views_detail WITH (security_invoker = true) AS
+SELECT
+    r.schema_name,
+    r.relation_name AS view_name,
+    v.view_definition AS definition,
+    (v.is_updatable = 'YES') AS is_updatable,
+    v.check_option
+FROM metagration.relations r
+JOIN information_schema.views v
+    ON v.table_schema = r.schema_name
+    AND v.table_name = r.relation_name
+WHERE r.relation_type = 'view';
+
+-- metagration.materialized_views_detail
+-- Materialized view attributes
+-- Note: PostgreSQL does not track REFRESH MATERIALIZED VIEW timestamps in system catalogs
+CREATE VIEW metagration.materialized_views_detail WITH (security_invoker = true) AS
+SELECT
+    r.schema_name,
+    r.relation_name AS matview_name,
+    mv.definition,
+    mv.ispopulated AS has_data
+FROM metagration.relations r
+JOIN pg_catalog.pg_matviews mv
+    ON mv.schemaname = r.schema_name
+    AND mv.matviewname = r.relation_name
+WHERE r.relation_type = 'matview';
+
+-- metagration.foreign_tables_detail
+-- Foreign table attributes
+CREATE VIEW metagration.foreign_tables_detail WITH (security_invoker = true) AS
+SELECT
+    r.schema_name,
+    r.relation_name AS table_name,
+    fs.srvname AS server_name,
+    fdw.fdwname AS server_type,
+    fs.srvversion AS server_version,
+    ARRAY(
+        SELECT pg_catalog.quote_ident(option_name) || '=' || pg_catalog.quote_literal(option_value)
+        FROM pg_catalog.pg_options_to_table(ft.ftoptions)
+    ) AS foreign_table_options
+FROM metagration.relations r
+JOIN pg_catalog.pg_class c ON c.relname = r.relation_name
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace AND n.nspname = r.schema_name
+JOIN pg_catalog.pg_foreign_table ft ON ft.ftrelid = c.oid
+JOIN pg_catalog.pg_foreign_server fs ON fs.oid = ft.ftserver
+JOIN pg_catalog.pg_foreign_data_wrapper fdw ON fdw.oid = fs.srvfdw
+WHERE r.relation_type = 'foreign_table';
+
+-- metagration.partitions_detail
+-- Partition relationship information
+CREATE VIEW metagration.partitions_detail WITH (security_invoker = true) AS
+SELECT
+    r.schema_name,
+    r.relation_name AS partition_name,
+    pn.nspname AS parent_schema_name,
+    pc.relname AS parent_table_name,
+    pg_catalog.pg_get_expr(c.relpartbound, c.oid) AS partition_expression,
+    c.relispartition AS is_default
+FROM metagration.relations r
+JOIN pg_catalog.pg_class c ON c.relname = r.relation_name
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace AND n.nspname = r.schema_name
+LEFT JOIN pg_catalog.pg_inherits i ON i.inhrelid = c.oid
+LEFT JOIN pg_catalog.pg_class pc ON pc.oid = i.inhparent
+LEFT JOIN pg_catalog.pg_namespace pn ON pn.oid = pc.relnamespace
+WHERE r.relation_type = 'partition';
+
+-- metagration.column_statistics
+-- Statistical distribution data
+CREATE VIEW metagration.column_statistics WITH (security_invoker = true) AS
+SELECT
+    s.schemaname AS schema_name,
+    s.tablename AS table_name,
+    s.attname AS column_name,
+    s.null_frac AS null_fraction,
+    s.avg_width,
+    s.n_distinct,
+    s.correlation,
+    s.most_common_vals::text AS most_common_vals,
+    s.most_common_freqs
+FROM pg_catalog.pg_stats s
+WHERE EXISTS (
+    SELECT 1 FROM metagration.relations r
+    WHERE r.schema_name = s.schemaname
+    AND r.relation_name = s.tablename
+);
+
+-- Create migration script for introspection views
+-- This allows views to be versioned and rolled back if needed
+-- Note: This runs after extension creation, not during
+DO $$
+BEGIN
+    -- Only create if we're NOT creating an extension (i.e., after extension is created)
+    -- During CREATE EXTENSION, pg_extension has an entry with objid = NULL for the extension being created
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_depend d
+        JOIN pg_catalog.pg_extension e ON d.refobjid = e.oid
+        WHERE e.extname = 'metagration'
+        AND d.deptype = 'e'
+        LIMIT 1
+    ) THEN
+        -- We're not in extension creation context, safe to create migration script
+        IF EXISTS (
+            SELECT 1 FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'metagration' AND c.relname = 'script'
+        ) THEN
+            -- Check if this script already exists
+            IF NOT EXISTS (
+                SELECT 1 FROM metagration.script WHERE comment = 'Add database introspection views'
+            ) THEN
+                PERFORM metagration.new_script(
+                    $up$
+                        -- Views are already created above, this is a no-op placeholder
+                        -- In production, views would be created here
+                        DO $noop$ BEGIN NULL; END $noop$;
+                    $up$,
+                    $down$
+                        -- Drop all introspection views in reverse order
+                        DROP VIEW IF EXISTS metagration.column_statistics;
+                        DROP VIEW IF EXISTS metagration.partitions_detail;
+                        DROP VIEW IF EXISTS metagration.foreign_tables_detail;
+                        DROP VIEW IF EXISTS metagration.materialized_views_detail;
+                        DROP VIEW IF EXISTS metagration.views_detail;
+                        DROP VIEW IF EXISTS metagration.tables_detail;
+                        DROP VIEW IF EXISTS metagration.constraints;
+                        DROP VIEW IF EXISTS metagration.columns;
+                        DROP VIEW IF EXISTS metagration.relations;
+                    $down$,
+                    comment := 'Add database introspection views'
+                );
+            END IF;
+        END IF;
+    END IF;
+END $$;

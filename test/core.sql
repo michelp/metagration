@@ -1,3 +1,23 @@
+-- Clean up any migration scripts created during extension installation
+DO $$
+DECLARE
+    script_rec RECORD;
+BEGIN
+    FOR script_rec IN SELECT * FROM metagration.script WHERE revision > 0 LOOP
+        IF script_rec.up_script IS NOT NULL THEN
+            EXECUTE format('DROP PROCEDURE IF EXISTS %I.%I', script_rec.script_schema, script_rec.up_script);
+        END IF;
+        IF script_rec.down_script IS NOT NULL THEN
+            EXECUTE format('DROP PROCEDURE IF EXISTS %I.%I', script_rec.script_schema, script_rec.down_script);
+        END IF;
+        IF script_rec.test_script IS NOT NULL THEN
+            EXECUTE format('DROP PROCEDURE IF EXISTS %I.%I', script_rec.script_schema, script_rec.test_script);
+        END IF;
+    END LOOP;
+    DELETE FROM metagration.script WHERE revision > 0;
+    UPDATE metagration.script SET is_current = true WHERE revision = 0;
+END $$;
+
 SELECT lives_ok($$
 SELECT new_script(
 'CREATE TABLE foo (bar int);',

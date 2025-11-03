@@ -168,6 +168,53 @@ Migrations are stored in `metagration.script` table:
 3. Run `make test` to verify no regressions
 4. All tests must still pass
 
+## Database Introspection Views
+
+Metagration includes a hierarchical set of introspection views in the `metagration` schema.
+
+### Architecture
+
+**Hierarchical design:**
+- Base `relations` view: common attributes for all table-like objects
+- Detail views: type-specific attributes (tables_detail, views_detail, etc.)
+- Supporting views: columns, constraints, statistics
+
+**Security model:**
+- All views use `SECURITY INVOKER`
+- Permission filtering via `has_table_privilege()`
+- Only shows objects user can SELECT
+
+**Data sources:**
+- Primary: pg_catalog (pg_class, pg_attribute, pg_constraint, etc.)
+- Secondary: information_schema (for standardized column metadata)
+- Statistics: pg_stats (automatically permission-filtered)
+
+### View Dependencies
+
+```
+relations (base)
+├── tables_detail
+├── views_detail
+├── materialized_views_detail
+├── foreign_tables_detail
+├── partitions_detail
+├── columns (also uses information_schema.columns)
+└── constraints (also uses information_schema.table_constraints)
+
+column_statistics (independent, uses pg_stats)
+```
+
+### Adding New Introspection Features
+
+When adding new introspection views:
+
+1. Follow TDD: write test first in `test/introspection.sql`
+2. Add view to `sql/metagration.sql` with `SECURITY INVOKER`
+3. Use fully-qualified names (pg_catalog.pg_class)
+4. Filter by `has_table_privilege()` or join to existing filtered view
+5. Update test plan count in `test/test.sql`
+6. Run `make test` to verify
+
 ## Version History
 
 - v2.0.0: TLE release for PostgreSQL 18+

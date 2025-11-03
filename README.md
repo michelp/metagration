@@ -401,6 +401,53 @@ This setup:
 
 4. **Test in Staging**: Always test migrations in a non-production environment first.
 
+## Database Introspection
+
+Metagration includes comprehensive introspection views for discovering and analyzing database structure from webapps or admin tools.
+
+### Available Views
+
+**Base View:**
+- `metagration.relations` - All table-like objects (tables, views, matviews, foreign tables, partitions)
+
+**Detail Views:**
+- `metagration.tables_detail` - Table-specific attributes
+- `metagration.views_detail` - View definitions and updatability
+- `metagration.materialized_views_detail` - Matview status and refresh info
+- `metagration.foreign_tables_detail` - Foreign data wrapper configuration
+- `metagration.partitions_detail` - Partition hierarchy
+
+**Supporting Views:**
+- `metagration.columns` - Column metadata with types and defaults
+- `metagration.constraints` - Primary keys, foreign keys, unique, check constraints
+- `metagration.column_statistics` - Statistical distribution data
+
+### Security
+
+All introspection views respect PostgreSQL permissions using `has_table_privilege()`. Users only see objects they have SELECT access to.
+
+### Example Usage
+
+```sql
+-- List all tables in public schema
+SELECT relation_name, row_estimate, total_bytes
+FROM metagration.relations
+WHERE schema_name = 'public' AND relation_type = 'table';
+
+-- Get all columns for a specific table
+SELECT column_name, data_type, is_nullable, column_default
+FROM metagration.columns
+WHERE schema_name = 'public' AND table_name = 'users'
+ORDER BY ordinal_position;
+
+-- Find all foreign key relationships
+SELECT table_name, constraint_name,
+       foreign_schema_name, foreign_table_name,
+       update_rule, delete_rule
+FROM metagration.constraints
+WHERE schema_name = 'public' AND constraint_type = 'FOREIGN KEY';
+```
+
 ## How does it work?
 
 Metagration scripts are stored procedures run *in revision order*.
