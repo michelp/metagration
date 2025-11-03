@@ -53,3 +53,4 @@ dkms.conf
 
 # TLE Generated files
 install-tle.sql
+.worktrees/
