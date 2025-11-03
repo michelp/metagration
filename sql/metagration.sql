@@ -570,3 +570,46 @@ COMMENT ON PROCEDURE metagration.setup_permissions(text) IS
 'Configure recommended permissions for migration management.
 Creates a restricted permission model where only the specified role
 can create and run migrations. Default role is migration_admin.';
+
+-- ============================================================================
+-- DATABASE INTROSPECTION VIEWS
+-- ============================================================================
+
+-- Base view: metagration.relations
+-- All table-like objects with common attributes
+CREATE VIEW metagration.relations WITH (security_invoker = true) AS
+SELECT
+    n.nspname AS schema_name,
+    c.relname AS relation_name,
+    CASE c.relkind
+        WHEN 'r' THEN CASE
+            WHEN c.relispartition THEN 'partition'
+            ELSE 'table'
+        END
+        WHEN 'v' THEN 'view'
+        WHEN 'm' THEN 'matview'
+        WHEN 'f' THEN 'foreign_table'
+        WHEN 'p' THEN 'table'  -- partitioned table
+    END AS relation_type,
+    pg_catalog.pg_get_userbyid(c.relowner) AS owner,
+    ts.spcname AS tablespace,
+    c.reltuples::bigint AS row_estimate,
+    COALESCE(pg_catalog.pg_total_relation_size(c.oid), 0) AS total_bytes,
+    COALESCE(pg_catalog.pg_table_size(c.oid), 0) AS table_bytes,
+    COALESCE(pg_catalog.pg_indexes_size(c.oid), 0) AS index_bytes,
+    COALESCE(pg_catalog.pg_total_relation_size(c.oid), 0) -
+        COALESCE(pg_catalog.pg_table_size(c.oid), 0) -
+        COALESCE(pg_catalog.pg_indexes_size(c.oid), 0) AS toast_bytes,
+    pg_catalog.obj_description(c.oid, 'pg_class') AS comment,
+    s.last_vacuum AS created_at,
+    s.last_analyze AS last_analyzed,
+    (c.relhasindex) AS has_indexes,
+    (EXISTS (SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid = c.oid AND tgisinternal = false)) AS has_triggers,
+    (c.relhasrules) AS has_rules
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_tablespace ts ON ts.oid = c.reltablespace
+LEFT JOIN pg_catalog.pg_stat_all_tables s ON s.relid = c.oid
+WHERE c.relkind IN ('r', 'v', 'm', 'f', 'p')
+    AND n.nspname NOT IN ('pg_toast')
+    AND pg_catalog.has_table_privilege(c.oid, 'SELECT');
